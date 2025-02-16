@@ -1,0 +1,24 @@
+lr : 1.0e-4
+epochs : 5401
+batch_size : 1200
+
+inf_every : 900
+print_every : 300
+
+dim : 2
+hidden_dim : 64
+
+horizon_size : 8
+inference_horizon : 4
+scale_factor : 2.0
+downsample : 5
+
+ema_warmup : 20
+ema_update : 5
+ema_decay : 0.999
+
+inf_runs_num : 3
+
+save_epoch : 6000
+
+device : 'cpu'

@@ -107,4 +107,4 @@ def evaluate_model(model,
   return error
 
 if __name__ == '__main__':
-   print("Jopa")
+   print("Run as script")

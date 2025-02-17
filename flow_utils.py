@@ -1,5 +1,3 @@
-
-
 def CondOT_flow(x0, x1, t):
   xt = (1-t[:,None,None])*x0 + t[:,None,None]*x1
   return xt

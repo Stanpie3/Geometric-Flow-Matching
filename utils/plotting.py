@@ -3,7 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def plot_flow(results_list, samples_list, gt_samples, plot_samples=True):
+def plot_flow(results_list, 
+              samples_list, 
+              gt_samples, 
+              plot_samples=True):
     """
     Plots multiple flows from sampled points to results in 2D space, side by side.
 
@@ -14,7 +17,9 @@ def plot_flow(results_list, samples_list, gt_samples, plot_samples=True):
     """
     num_plots = len(results_list)
     fig, axes = plt.subplots(1, num_plots, figsize=(4 * num_plots, 4))
-    
+    gt_samples = gt_samples.cpu().numpy() if isinstance(gt_samples, torch.Tensor) else gt_samples
+
+    lim_min, lim_max = gt_samples.min(axis=0), gt_samples.max(axis=0)
     if num_plots == 1:
         axes = [axes]  # Ensure axes is iterable
     
@@ -35,6 +40,8 @@ def plot_flow(results_list, samples_list, gt_samples, plot_samples=True):
         ax.legend()
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
+        ax.set_xlim(lim_min[0]-1, lim_max[0]+1)
+        ax.set_ylim(lim_min[1]-1, lim_max[1]+1)
         ax.set_title("Flow from Base to Target")
         ax.grid(True)
     

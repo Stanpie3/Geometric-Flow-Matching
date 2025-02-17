@@ -1,9 +1,9 @@
 lr : 1.0e-4
-epochs : 5401
+epochs : 10001
 batch_size : 1200
 
-inf_every : 900
-print_every : 300
+inf_every : 1000
+print_every : 500
 
 dim : 2
 hidden_dim : 64
@@ -13,7 +13,7 @@ inference_horizon : 4
 scale_factor : 2.0
 downsample : 5
 
-ema_warmup : 20
+ema_warmup : 250
 ema_update : 5
 ema_decay : 0.999
 

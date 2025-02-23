@@ -65,8 +65,9 @@ def infer_model(model,
     c, tau_minus_c = sample_context(idx=step_idx, sample_points=sample_points)
     context = torch.cat([results[step_idx], results[c], tau_minus_c]).unsqueeze(0)
 
-    wrapped_vf = WrappedVF(ProjectToTangent(vecfield=model,
-                                            manifold=manifold),
+    wrapped_vf = WrappedVF(#ProjectToTangent(vecfield=model,
+                           #                manifold=manifold),
+                            model=model,
                             obs=context)
     wrapped_vf.eval()
 
@@ -98,6 +99,38 @@ def infer_model(model,
     step_idx = new_idx 
   return results, samples
 
+def step(vf, batch, 
+         run_parameters, 
+         manifold,
+         path,
+         device='cpu'):
+    obs, a1 = batch
+    obs, a1 = obs.to(device), a1.to(device)
+
+    batch_size=a1.shape[0]
+
+    a0 = sample_normal_source(batch_size=batch_size,
+                                dim=run_parameters['dim']-1, 
+                                horizon=run_parameters['horizon_size'], 
+                                manifold=manifold, 
+                                mean=run_parameters['mean'],
+                                std=run_parameters['std'])
+
+
+    t = torch.rand(a0.shape[0]).to(device)
+    t_flat = t.unsqueeze(1).repeat(1, a0.shape[1]).view(a0.shape[0] * a0.shape[1])
+
+    path_sample = path.sample(t=t_flat, 
+                            x_0=a0.view(a0.shape[0]*a0.shape[1], a0.shape[2]), 
+                            x_1=a1.view(a0.shape[0]*a0.shape[1], a0.shape[2]))
+
+    result_vf = vf(obs=obs, x=path_sample.x_t.view(a0.shape), t=t)
+    result_vf = manifold.proju(path_sample.x_t.view(a0.shape), result_vf)
+
+    target_vf = path_sample.dx_t.view(a0.shape)
+
+    loss = torch.pow(result_vf - target_vf, 2).mean()
+    return loss
 # def sample_from_gt_obs(obs):
 #     """
 #     Samples values from gt_obs such that for the k-th sample, the sampled index i is not larger than k.

@@ -22,6 +22,6 @@ def validate(vf_model,
     a_t = CondOT_flow(a0, a1, t)
     da_t = CondOT_ut(a0, a1, t)
 
-    loss = torch.pow(vf_model(obs=obs, a=a_t, t=t) - da_t, 2).mean()
+    loss = torch.pow(vf_model(obs=obs, x=a_t, t=t) - da_t, 2).mean()
 
     return loss.item()

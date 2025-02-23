@@ -2,6 +2,7 @@ import torch
 from torch import nn, Tensor
 from inspect import signature
 import numpy as np
+from flow_matching.utils.manifolds import Manifold, Sphere
 
 class TimeDependentSwish(nn.Module):
     def __init__(self, dim):
@@ -94,14 +95,14 @@ class StateMLP(nn.Module):
                         d_out=horizon_size * action_dim,
                         d_model=hidden_dim)
 
-    def forward(self, obs: Tensor, a: Tensor, t: Tensor) -> Tensor:
+    def forward(self, obs: Tensor, x: Tensor, t: Tensor) -> Tensor:
       batch_size = obs.shape[0]
 
       obs = obs.view(batch_size, self.obs_dim)
-      a = a.contiguous().view(batch_size, self.action_dim * self.horizon_size)
+      x = x.contiguous().view(batch_size, self.action_dim * self.horizon_size)
       t = t.view(batch_size, self.time_dim)
 
-      h = torch.cat([obs, a], dim=1)
+      h = torch.cat([obs, x], dim=1)
       output = self.model(t, h)
 
       return output.view(batch_size, self.horizon_size, self.action_dim)
@@ -111,15 +112,35 @@ class WrappedVF(nn.Module):
         super().__init__()
         self.model = model
         self.obs = obs
-    def forward(self, a: torch.Tensor, t: torch.Tensor):
-        return self.model(obs=self.obs, a=a, t=t)
+    def forward(self, x: torch.Tensor, t: torch.Tensor):
+        return self.model(obs=self.obs, x=x, t=t)
+    
+class ProjectToTangent(nn.Module):
+    """Projects a vector field onto the tangent plane at the input."""
+
+    def __init__(self, vecfield: nn.Module, manifold: Manifold=None):
+        super().__init__()
+        self.vecfield = vecfield
+        self.manifold = manifold
+
+    def forward(self, obs: Tensor, x: Tensor, t: Tensor) -> Tensor:
+        if self.manifold:
+            x = self.manifold.projx(x)
+            obs = self.manifold.projx(obs)
+            v = self.vecfield(obs, x, t)
+            v = self.manifold.proju(x, v)
+            return v
+        else:
+            return self.vecfield(obs, x, t)
     
 
 if __name__ == '__main__':
-    model = StateMLP(action_dim=2, 
-                     time_dim=1, 
-                     hidden_dim=64, 
-                     horizon_size=8)
+    model = ProjectToTangent(
+        vecfield=StateMLP(action_dim=3, 
+                        time_dim=1, 
+                        hidden_dim=64, 
+                        horizon_size=8),
+        manifold=Sphere)
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
     print("Learnable param number:", params)

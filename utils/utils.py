@@ -11,7 +11,8 @@ sys.path.append(ROOT_DIR)
 from utils.schemes import Euler, RK4
 from models.state_mlp import WrappedVF
 
-def infer_model(model, start, 
+def infer_model(model, 
+                start, 
                 scheme=Euler, 
                 num_steps=100, 
                 sample_points=1000, 
@@ -105,6 +106,6 @@ def evaluate_model(model,
 
   error = torch.sqrt(((at - horizon_obs).clone()**2).sum(axis=(1,2)))
   return error
-
+   
 if __name__ == '__main__':
    print("Run as script")

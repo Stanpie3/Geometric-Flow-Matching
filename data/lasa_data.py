@@ -3,13 +3,21 @@ import numpy as np
 from torch import nn, Tensor
 from torch.utils.data import Dataset, DataLoader
 import pyLasaDataset as lasa
+from flow_matching.utils.manifolds import Manifold
+
+def wrap(manifold, samples):
+    center = torch.cat([torch.zeros_like(samples), torch.ones_like(samples[..., 0:1])], dim=-1)
+    samples = torch.cat([samples, torch.zeros_like(samples[..., 0:1])], dim=-1) / 2
+
+    return manifold.expmap(center, samples)
 
 class StatePyLASADataset(Dataset):
     def __init__(self, dataset_name: str,
                  horizon_size: int = 5,
                  normalize: bool = True,
                  scaling_factor: float = 1.0,
-                 downsample: int = 1):
+                 downsample: int = 1,
+                 manifold : Manifold = None):
         """
         PyTorch Dataset wrapper for LASA with normalization and structured observations.
 
@@ -21,6 +29,7 @@ class StatePyLASADataset(Dataset):
         self.dataset = getattr(lasa.DataSet, dataset_name)
         self.horizon_size = horizon_size
         self.downsample = downsample
+        self.manifold=manifold
 
         self.sample_size = self.dataset.demos[0].pos.T.shape[0] // downsample
         self.data = self._concatenate_demos()
@@ -30,6 +39,9 @@ class StatePyLASADataset(Dataset):
         self._scale(scaling_factor)
 
         self.data = torch.tensor(self.data, dtype=torch.float32)
+
+        if self.manifold:
+            self.data = wrap(manifold=manifold, samples=self.data)
 
     def _concatenate_demos(self):
         """Concatenates all demonstrations into a single sequence, downsampling each demo if needed."""

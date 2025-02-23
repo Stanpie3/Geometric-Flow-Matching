@@ -2,6 +2,116 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
+from mpl_toolkits.mplot3d import Axes3D
+
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+def plot_flow_on_sphere(results_list, 
+                        samples_list, 
+                        gt_samples, 
+                        plot_samples=True,
+                        elev=-90,
+                        azim=0):
+    """
+    Plots multiple flows from sampled points to results on the 2-sphere.
+
+    Args:
+        results_list (list of torch.Tensor or numpy.ndarray): List of tensors/arrays, each of shape (N, 3), representing final points.
+        samples_list (list of torch.Tensor or numpy.ndarray): List of tensors/arrays, each of shape (N, 3), representing initial sampled points.
+        gt_samples (torch.Tensor or numpy.ndarray): (M, 3) ground truth points on S².
+        plot_samples (bool): Whether to plot the initial sample points and connections.
+    """
+    num_plots = len(results_list)
+    fig, axes = plt.subplots(1, num_plots, subplot_kw={'projection': '3d'}, figsize=(4 * num_plots, 4))
+    if num_plots == 1:
+        axes = [axes]  # Ensure axes is iterable
+
+    # Convert tensors to numpy if needed
+    gt_samples = gt_samples.cpu().numpy() if isinstance(gt_samples, torch.Tensor) else gt_samples
+
+    for ax, results, samples in zip(axes, results_list, samples_list):
+        results = results.cpu().numpy() if isinstance(results, torch.Tensor) else results
+        samples = samples.cpu().numpy() if isinstance(samples, torch.Tensor) else samples
+
+        if plot_samples:
+            # Draw connections between sampled points and trajectory points
+            for i in range(samples.shape[0]):
+                ax.plot([samples[i, 0], results[i, 0]],
+                        [samples[i, 1], results[i, 1]],
+                        [samples[i, 2], results[i, 2]], 
+                        color="gold", alpha=0.3)
+
+            # Plot initial samples
+            ax.scatter(samples[:, 0], samples[:, 1], samples[:, 2], color="green", s=20, label="Base Distribution")
+
+        # Plot final results (target points)
+        ax.plot(results[:, 0], results[:, 1], results[:, 2], '-o', color="blue", linewidth=1, label="Learned Path")
+
+        # Plot ground truth trajectory
+        ax.plot(gt_samples[:, 0], gt_samples[:, 1], gt_samples[:, 2], color="red", linewidth=1, label="Ground Truth")
+
+        # Draw a sphere for reference
+        u = np.linspace(0, 2 * np.pi, 100)
+        v = np.linspace(0, np.pi, 50)
+        x = np.outer(np.cos(u), np.sin(v))
+        y = np.outer(np.sin(u), np.sin(v))
+        z = np.outer(np.ones(np.size(u)), np.cos(v))
+        ax.plot_wireframe(x, y, z, color="gray", alpha=0.2)
+
+        # Adjust view to center the north pole
+        ax.view_init(elev=elev, azim=azim)
+
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        ax.set_title("Flow on the 2-Sphere")
+        ax.legend()
+    
+    plt.tight_layout()
+    plt.show()
+
+def plot_3d_points(points, title="3D Scatter Plot", color="blue", s=20, show_grid=True):
+    """
+    Plots a set of 3D points interactively.
+
+    Args:
+        points (numpy.ndarray or torch.Tensor): Shape (N, 3), representing 3D points.
+        title (str): Title of the plot.
+        color (str): Color of the points.
+        s (int): Size of the scatter points.
+        show_grid (bool): Whether to show grid lines.
+    """
+    if isinstance(points, torch.Tensor):
+        points = points.cpu().numpy()  # Convert from PyTorch to NumPy if needed
+
+    fig = plt.figure(figsize=(6, 6))
+    ax = fig.add_subplot(111, projection="3d")
+
+    # Scatter plot of points
+    ax.scatter(points[:, 0], points[:, 1], points[:, 2], color=color, s=s)
+
+    # Labels and title
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.set_title(title)
+
+    # Optional grid
+    ax.grid(show_grid)
+
+    # Set equal aspect ratio
+    max_range = (points.max() - points.min()) / 2
+    mid = points.mean(axis=0)
+    ax.set_xlim(mid[0] - max_range, mid[0] + max_range)
+    ax.set_ylim(mid[1] - max_range, mid[1] + max_range)
+    ax.set_zlim(mid[2] - max_range, mid[2] + max_range)
+
+    # Interactive rotation
+    plt.show()
+
 
 def plot_flow(results_list, 
               samples_list, 

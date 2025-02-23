@@ -1,0 +1,29 @@
+lr : 1.0e-4
+epochs : 20001
+batch_size : 1200
+
+inf_every : 2000
+print_every : 500
+
+dim : 3
+hidden_dim : 64
+
+horizon_size : 8
+inference_horizon : 4
+scale_factor : 2.0
+downsample : 5
+
+mean : 0.0
+std : 1.0
+
+ema_warmup : 250
+ema_update : 5
+ema_decay : 0.999
+
+inf_runs_num : 3
+
+save_epoch : 6000
+
+device : 'cpu'
+
+manifold : 'Sphere'

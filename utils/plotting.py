@@ -48,7 +48,7 @@ def plot_flow_on_sphere(results_list,
             ax.scatter(samples[:, 0], samples[:, 1], samples[:, 2], color="green", s=20, label="Base Distribution")
 
         # Plot final results (target points)
-        ax.plot(results[:, 0], results[:, 1], results[:, 2], '-o', color="blue", linewidth=1, label="Learned Path")
+        ax.plot(results[:, 0], results[:, 1], results[:, 2], '--.', color="blue", linewidth=1, label="Learned Path")
 
         # Plot ground truth trajectory
         ax.plot(gt_samples[:, 0], gt_samples[:, 1], gt_samples[:, 2], color="red", linewidth=1, label="Ground Truth")

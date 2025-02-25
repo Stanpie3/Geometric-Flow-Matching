@@ -131,32 +131,71 @@ def step(vf, batch,
 
     loss = torch.pow(result_vf - target_vf, 2).mean()
     return loss
-# def sample_from_gt_obs(obs):
-#     """
-#     Samples values from gt_obs such that for the k-th sample, the sampled index i is not larger than k.
 
-#     Args:
-#         gt_obs (torch.Tensor): Tensor of shape (N, D) containing ground truth observations.
+def sample_from_gt_obs(obs):
+    """
+    Samples values from gt_obs such that for the k-th sample, the sampled index i is not larger than k.
+        Args:
+        gt_obs (torch.Tensor): Tensor of shape (N, D) containing ground truth observations.
 
-#     Returns:
-#         torch.Tensor: A tensor of shape (N, D + D + 1), containing:
-#                       - gt_obs[k] (selected based on k)
-#                       - gt_obs[i] (randomly sampled i ≤ k)
-#                       - (k - i) / k (normalized difference)
-#     """
-#     batch_size = obs.shape[0]
+        Returns:
+            torch.Tensor: A tensor of shape (N, D + D + 1), containing:
+                        - gt_obs[k] (selected based on k)
+                        - gt_obs[i] (randomly sampled i ≤ k)
+                        - (k - i) / k (normalized difference)
+    """
+    batch_size = obs.shape[0]
 
-#     indices = np.arange(batch_size)
-#     sampled_indices = np.array([np.random.randint(0, k+1) for k in indices])  # i ≤ k
+    indices = np.arange(batch_size)
+    sampled_indices = np.array([np.random.randint(0, k+1) for k in indices])  # i ≤ k
 
-#     differences = (indices - sampled_indices) / (indices + 1)
+    differences = (indices - sampled_indices) / (indices + 1)
 
-#     gt_obs_k = obs[indices]
-#     gt_obs_i = obs[sampled_indices]
+    gt_obs_k = obs[indices]
+    gt_obs_i = obs[sampled_indices]
 
-#     result = torch.cat((gt_obs_k, gt_obs_i, torch.tensor(differences, dtype=torch.float32).unsqueeze(1)), dim=1)
+    result = torch.cat((gt_obs_k, gt_obs_i, torch.tensor(differences, dtype=torch.float32).unsqueeze(1)), dim=1)
 
-#     return result
+    return result
+
+def evaluate_model_manifold(model,
+                            gt_obs:torch.Tensor,
+                            method:str="midpoint",
+                            manifold:Manifold=None,
+                            step_size:float=0.01, 
+                            inference_horizon:int=4,
+                            model_horizon:int=8,
+                            mean:float=0.0,
+                            std:float=1.0,
+                            return_intermediates=False,
+                            verbose=False):
+
+    context = sample_from_gt_obs(gt_obs)
+
+    wrapped_vf = WrappedVF(model=model,
+                            obs=context)
+    wrapped_vf.eval()
+
+    a0 = sample_normal_source(dim=gt_obs.shape[-1]-1, 
+                                horizon=model_horizon, 
+                                manifold=manifold, 
+                                mean=mean,
+                                std=std)
+
+    solver = RiemannianODESolver(velocity_model=wrapped_vf, 
+                                 manifold=manifold)
+
+    #T = torch.linspace(0, 1, 3)  # sample times
+
+    a_infer = solver.sample(
+                    x_init=a0,
+                    step_size=step_size,
+                    method=method,
+                    return_intermediates=return_intermediates,
+                    verbose=verbose,
+                )
+
+    return error
 
 # def evaluate_model(model, 
 #                    gt_obs,

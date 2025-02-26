@@ -27,9 +27,8 @@ def plot_flow_on_sphere(results_list,
     num_plots = len(results_list)
     fig, axes = plt.subplots(1, num_plots, subplot_kw={'projection': '3d'}, figsize=(4 * num_plots, 4))
     if num_plots == 1:
-        axes = [axes]  # Ensure axes is iterable
+        axes = [axes]
 
-    # Convert tensors to numpy if needed
     gt_samples = gt_samples.cpu().numpy() if isinstance(gt_samples, torch.Tensor) else gt_samples
 
     for ax, results, samples in zip(axes, results_list, samples_list):
@@ -37,23 +36,18 @@ def plot_flow_on_sphere(results_list,
         samples = samples.cpu().numpy() if isinstance(samples, torch.Tensor) else samples
 
         if plot_samples:
-            # Draw connections between sampled points and trajectory points
             for i in range(samples.shape[0]):
                 ax.plot([samples[i, 0], results[i, 0]],
                         [samples[i, 1], results[i, 1]],
                         [samples[i, 2], results[i, 2]], 
                         color="gold", alpha=0.3)
 
-            # Plot initial samples
             ax.scatter(samples[:, 0], samples[:, 1], samples[:, 2], color="green", s=20, label="Base Distribution")
 
-        # Plot final results (target points)
         ax.plot(results[:, 0], results[:, 1], results[:, 2], '--.', color="blue", linewidth=1, label="Learned Path")
 
-        # Plot ground truth trajectory
         ax.plot(gt_samples[:, 0], gt_samples[:, 1], gt_samples[:, 2], color="red", linewidth=1, label="Ground Truth")
 
-        # Draw a sphere for reference
         u = np.linspace(0, 2 * np.pi, 100)
         v = np.linspace(0, np.pi, 50)
         x = np.outer(np.cos(u), np.sin(v))
@@ -61,7 +55,6 @@ def plot_flow_on_sphere(results_list,
         z = np.outer(np.ones(np.size(u)), np.cos(v))
         ax.plot_wireframe(x, y, z, color="gray", alpha=0.2)
 
-        # Adjust view to center the north pole
         ax.view_init(elev=elev, azim=azim)
 
         ax.set_xlabel("X")
@@ -85,31 +78,26 @@ def plot_3d_points(points, title="3D Scatter Plot", color="blue", s=20, show_gri
         show_grid (bool): Whether to show grid lines.
     """
     if isinstance(points, torch.Tensor):
-        points = points.cpu().numpy()  # Convert from PyTorch to NumPy if needed
+        points = points.cpu().numpy()
 
     fig = plt.figure(figsize=(6, 6))
     ax = fig.add_subplot(111, projection="3d")
 
-    # Scatter plot of points
     ax.scatter(points[:, 0], points[:, 1], points[:, 2], color=color, s=s)
 
-    # Labels and title
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
     ax.set_title(title)
 
-    # Optional grid
     ax.grid(show_grid)
 
-    # Set equal aspect ratio
     max_range = (points.max() - points.min()) / 2
     mid = points.mean(axis=0)
     ax.set_xlim(mid[0] - max_range, mid[0] + max_range)
     ax.set_ylim(mid[1] - max_range, mid[1] + max_range)
     ax.set_zlim(mid[2] - max_range, mid[2] + max_range)
 
-    # Interactive rotation
     plt.show()
 
 
@@ -131,7 +119,7 @@ def plot_flow(results_list,
 
     lim_min, lim_max = gt_samples.min(axis=0), gt_samples.max(axis=0)
     if num_plots == 1:
-        axes = [axes]  # Ensure axes is iterable
+        axes = [axes]
     
     for ax, results, samples in zip(axes, results_list, samples_list):
         results = results.cpu().numpy() if isinstance(results, torch.Tensor) else results
@@ -168,20 +156,16 @@ def plot_error_for_each_point(obs_coordinate, error):
         error (torch.Tensor or np.ndarray): Array of shape (N,) containing error values for each point.
     """
 
-    # Convert to numpy if tensors are given
     obs_coordinate = obs_coordinate.cpu().numpy() if isinstance(obs_coordinate, torch.Tensor) else obs_coordinate
     error = error.cpu().numpy() if isinstance(error, torch.Tensor) else error
 
-    # Create scatter plot with magma colormap
     plt.figure(figsize=(8, 6))
     scatter = plt.scatter(obs_coordinate[:, 0], obs_coordinate[:, 1], 
                           c=error, cmap="plasma", s=20, edgecolor="k", alpha=0.75)
 
-    # Add color bar
     cbar = plt.colorbar(scatter)
     cbar.set_label("MSE between target horizon and approximated", fontsize=12)
 
-    # Labels and title
     plt.xlabel("X Coordinate")
     plt.ylabel("Y Coordinate")
     plt.title("Trajectory Error")

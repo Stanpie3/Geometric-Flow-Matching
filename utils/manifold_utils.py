@@ -22,6 +22,7 @@ def sample_normal_source(batch_size:int=1,
                         manifold:Manifold=None):
     samples = torch.randn((batch_size, 1, dim)) * std + mean ##dangerous. Logic: sample on tangent + project
     samples = samples.repeat(1, horizon, 1)
+
     
     if manifold is not None:
         samples = wrap(manifold, samples)
@@ -65,10 +66,8 @@ def infer_model(model,
     c, tau_minus_c = sample_context(idx=step_idx, sample_points=sample_points)
     context = torch.cat([results[step_idx], results[c], tau_minus_c]).unsqueeze(0)
 
-    wrapped_vf = WrappedVF(#ProjectToTangent(vecfield=model,
-                           #                manifold=manifold),
-                            model=model,
-                            obs=context)
+    wrapped_vf = WrappedVF(model=model,
+                           obs=context)
     wrapped_vf.eval()
 
     a0 = sample_normal_source(dim=start.shape[-1]-1, 
@@ -104,6 +103,7 @@ def step(vf, batch,
          manifold,
          path,
          device='cpu'):
+    
     obs, a1 = batch
     obs, a1 = obs.to(device), a1.to(device)
 
@@ -115,8 +115,7 @@ def step(vf, batch,
                                 manifold=manifold, 
                                 mean=run_parameters['mean'],
                                 std=run_parameters['std'])
-
-
+    
     t = torch.rand(a0.shape[0]).to(device)
     t_flat = t.unsqueeze(1).repeat(1, a0.shape[1]).view(a0.shape[0] * a0.shape[1])
 
@@ -196,29 +195,6 @@ def evaluate_model_manifold(model,
                 )
 
     return error
-
-# def evaluate_model(model, 
-#                    gt_obs,
-#                    horizon_obs,
-#                    scheme=Euler, 
-#                    num_steps=100,
-#                    model_horizon=8,
-#                    action_dim=2):
-  
-#   error = torch.zeros(gt_obs.shape[0])
-
-#   context = sample_from_gt_obs(gt_obs)
-
-#   wrapped_vf = WrappedVF(model, context)
-#   wrapped_vf.eval()
-
-#   a0 = torch.randn(gt_obs.shape[0], 1, action_dim)
-#   a0 = a0.repeat(1, model_horizon, 1)
-
-#   at = scheme(wrapped_vf, a0, num_steps=num_steps)
-
-#   error = torch.sqrt(((at - horizon_obs).clone()**2).sum(axis=(1,2)))
-#   return error
    
 if __name__ == '__main__':
    start = torch.randn(1,2)

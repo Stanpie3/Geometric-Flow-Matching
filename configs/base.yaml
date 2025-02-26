@@ -1,5 +1,5 @@
 lr : 1.0e-4
-epochs : 10001
+epochs : 15001
 batch_size : 1200
 
 inf_every : 1000

@@ -10,11 +10,11 @@ hidden_dim : 64
 
 horizon_size : 8
 inference_horizon : 4
-scale_factor : 2.0
+scale_factor : 3.0
 downsample : 5
 
 mean : 0.0
-std : 0.8 #1.0
+std : 1.2 #1.0
 
 ema_warmup : 1000
 ema_update : 5

@@ -5,9 +5,27 @@ from torch.utils.data import Dataset, DataLoader
 import pyLasaDataset as lasa
 from flow_matching.utils.manifolds import Manifold
 
-def wrap(manifold, samples):
-    center = torch.cat([torch.zeros_like(samples), torch.ones_like(samples[..., 0:1])], dim=-1)
-    samples = torch.cat([samples, torch.zeros_like(samples[..., 0:1])], dim=-1) / 2
+def wrap(manifold, samples, dim_from, dim_to):
+    """
+    Projects points from R^(dim_from) to an dim_to-dimensional manifold.
+
+    Args:
+        manifold: The manifold object with an `expmap` function.
+        samples: Tensor of shape (..., dim_from), representing points in R^(dim_from).
+        dim_from: The original dimension of the input space (n-k).
+        dim_to: The target dimension of the output space (n).
+
+    Returns:
+        Tensor of shape (..., dim_to), mapped onto the manifold.
+    """
+    k = dim_to - dim_from
+
+    if k <= 0:
+        raise ValueError("dim_to must be greater than dim_from")
+
+    center = torch.cat([torch.zeros_like(samples), torch.ones_like(samples[..., :k])], dim=-1)
+
+    samples = torch.cat([samples, torch.zeros_like(samples[..., :k])], dim=-1) / 2
 
     return manifold.expmap(center, samples)
 

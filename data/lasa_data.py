@@ -1,3 +1,4 @@
+import __main__
 import torch
 import numpy as np
 from torch import nn, Tensor
@@ -30,102 +31,129 @@ def wrap(manifold, samples, dim_from, dim_to):
     return manifold.expmap(center, samples)
 
 class StatePyLASADataset(Dataset):
-    def __init__(self, dataset_name: str,
+    def __init__(self, dataset_names: list,
+                 train: list,
                  horizon_size: int = 5,
                  normalize: bool = True,
                  scaling_factor: float = 1.0,
                  downsample: int = 1,
-                 manifold : Manifold = None):
+                 manifold: Manifold = None,
+                 dim_from: int = 2,
+                 dim_to: int = 3,
+                 start_points: dict = None):
         """
-        PyTorch Dataset wrapper for LASA with normalization and structured observations.
+        PyTorch Dataset wrapper for multiple LASA datasets with normalization and structured observations.
 
         Args:
-            dataset_name (str): Name of the dataset to load (e.g., "Angle", "Sine").
+            dataset_names (list): List of dataset names to load.
             horizon_size (int): Number of future steps for action horizon.
-            normalize (bool): Whether to normalize x and y values.
+            normalize (bool): Whether to normalize data.
+            scaling_factor (float): Scaling factor for data.
+            downsample (int): Downsampling factor.
+            manifold (Manifold, optional): If provided, maps data onto the given manifold.
+            dim_from (int): Dimension of the input space.
+            dim_to (int): Dimension of the output space.
         """
-        self.dataset = getattr(lasa.DataSet, dataset_name)
         self.horizon_size = horizon_size
         self.downsample = downsample
-        self.manifold=manifold
+        self.manifold = manifold
+        self.dim_from = dim_from
+        self.dim_to = dim_to
+        self.train = train
+        self.start_points = start_points if start_points else {}
 
-        self.sample_size = self.dataset.demos[0].pos.T.shape[0] // downsample
-        self.data = self._concatenate_demos()
-        if normalize:
-            self._normalize()
+        self.demos = []
+        self.horizons = []
+        self.labels = []
+        self.class_mapping = {name: i for i, name in enumerate(dataset_names)}
 
-        self._scale(scaling_factor)
+        for dataset_name in dataset_names:
 
-        self.data = torch.tensor(self.data, dtype=torch.float32)
+            label = self.class_mapping[dataset_name]
+            dataset = getattr(lasa.DataSet, dataset_name)
 
-        if self.manifold:
-            self.data = wrap(manifold=manifold, samples=self.data)
+            for demo in dataset.demos:
+                demo_data = demo.pos.T
+                if self.downsample > 1:
+                    demo_data = demo_data[::self.downsample]
+                if normalize:
+                    demo_data = self._normalize(demo_data, dataset_name)
+                demo_data = demo_data * scaling_factor
+                demo_data = torch.tensor(demo_data, dtype=torch.float32)
+                if self.manifold:
+                    demo_data = wrap(manifold=self.manifold, 
+                                    samples=demo_data,
+                                    dim_from=self.dim_from, 
+                                    dim_to=self.dim_to)
+                
+                self.demos.append(demo_data)
+                self.horizons.append(self._get_horizons(demo_data))
+                self.labels.append(torch.tensor(label, dtype=torch.long))
 
-    def _concatenate_demos(self):
-        """Concatenates all demonstrations into a single sequence, downsampling each demo if needed."""
-        data_list = []
-        for demo in self.dataset.demos:
-            # demo.pos.T should be shape (N, 2)
-            demo_data = demo.pos.T
-            if self.downsample > 1:
-                demo_data = demo_data[::self.downsample]
-            data_list.append(demo_data)
-        return np.concatenate(data_list, axis=0)
+    def _get_horizons(self, demo):
+        N, dim = demo.shape
+        padded_demo = torch.nn.functional.pad(demo, (0, 0, 0, self.horizon_size), value=0)
+        strides = (padded_demo.stride(0), padded_demo.stride(0), padded_demo.stride(1))
+        return torch.as_strided(padded_demo, size=(N, self.horizon_size, dim), stride=strides)
 
-    def _normalize(self):
-      """Centers data at zero and normalizes x and y columns to range [-1, 1]."""
-      mean_vals = self.data.mean(axis=0)
-      centered_data = self.data - mean_vals
+    def _normalize(self, data, dataset_name):
+        mean_vals = data.mean(axis=0)
+        centered_data = data - mean_vals
+        min_vals, max_vals = centered_data.min(axis=0), centered_data.max(axis=0)
+        eps = 1e-8  
 
-      min_vals = centered_data.min(axis=0)
-      max_vals = centered_data.max(axis=0)
+        normalized_data = 2 * (centered_data - min_vals) / (max_vals - min_vals + eps) - 1
+        if dataset_name in self.start_points:
+            offset = self.start_points[dataset_name] - normalized_data[0]
+            normalized_data += offset
 
-      self.data = 2 * (centered_data - min_vals) / (max_vals - min_vals) - 1
+        return normalized_data
+    
+    def _sample_context(self, demo):
+        N = demo.shape[0]
 
+        indices = np.arange(N)
+        sampled_indices = np.array([np.random.randint(0, k+1) for k in indices])  # i ≤ k
 
-    def _scale(self, factor):
-        """Scales data by factor."""
-        self.data = self.data * factor
+        differences = (indices - sampled_indices) / (indices + 1)
+
+        gt_obs_k = demo[indices]
+        gt_obs_i = demo[sampled_indices]
+
+        result = torch.cat((gt_obs_k, gt_obs_i, torch.tensor(differences, dtype=torch.float32).unsqueeze(1)), dim=1)
+
+        return result
 
     def __len__(self):
-        return len(self.data)
+        return len(self.demos)
 
     def __getitem__(self, idx):
         """
         Returns:
-            obs: [o_{τ-1}, o_c, τ - c]  (Concatenated observation vector)
-            a: Future action horizon (with zero-padding if necessary)
-            t: Normalized time index
-        """
-        # Current position (x, y)
-        o_tau_1 = self.data[idx]
-
-        # Determine which demo the index belongs to
-        global_pos = idx // self.sample_size
-
-        # Context observation (sample from the same demo)
-        demo_start = global_pos * self.sample_size
-
-        if idx > demo_start:
-            c = np.random.randint(demo_start, idx)
+            obs: Concatenated observation vector.
+            a: Future action horizon (zero-padded if needed).
+            t: Normalized time index.
+            label: Class label of the sample.
+        """    
+        label = self.labels[idx]
+        demo = self.demos[idx]
+        if idx in self.train:
+            index_permutation = torch.randperm(demo.shape[0])
         else:
-            c = demo_start
-        o_c = self.data[c]
+            index_permutation = torch.arange(demo.shape[0])
+        a = self.horizons[idx][index_permutation]
+        obs = self._sample_context(demo)[index_permutation]
+        return obs, a, label
 
-        # Distance τ - c
-        tau_minus_c = torch.tensor((idx - c) / self.sample_size,
-                                   dtype=torch.float32).unsqueeze(0)
-
-        # Observation vector
-        obs = torch.cat([o_tau_1, o_c, tau_minus_c])
-
-        # Horizon within the same demo
-        demo_end = (global_pos + 1) * self.sample_size
-        available_steps = demo_end - (idx + 1)
-        steps_to_use = min(self.horizon_size, available_steps)
-        a = self.data[idx + 1 : idx + 1 + steps_to_use]
-        if steps_to_use < self.horizon_size:
-            pad_amount = self.horizon_size - steps_to_use
-            a = torch.nn.functional.pad(a, (0, 0, 0, pad_amount), mode="constant")
-
-        return (obs, a)
+if __name__ == '__main__':
+    LASA_datasets = ["Sine", "Angle"]
+    sine_data = StatePyLASADataset(LASA_datasets, 
+                               horizon_size=8,
+                               scaling_factor=2.0,
+                               downsample = 5,
+                               manifold=None,
+                               dim_to=3,
+                               normalize=True)
+    obs, a, label = next(iter(sine_data))
+    print(obs.shape, a.shape, label)
+    print(a[-10:])

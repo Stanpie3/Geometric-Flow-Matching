@@ -81,6 +81,9 @@ class StateMLP(nn.Module):
         time_dim: int = 1,
         hidden_dim: int = 128,
         horizon_size: int = 5,
+        num_layers: int = 6,
+        num_classes: int = 2,
+        label_embedding_dim: int = 8,
     ):
       super().__init__()
 
@@ -90,57 +93,70 @@ class StateMLP(nn.Module):
       self.hidden_dim = hidden_dim
       self.horizon_size = horizon_size
 
-      self.model = tMLP(d_in=self.obs_dim + \
-                             self.action_dim * self.horizon_size,
-                        d_out=horizon_size * action_dim,
-                        d_model=hidden_dim)
+      self.label_embedding_dim = label_embedding_dim
 
-    def forward(self, obs: Tensor, x: Tensor, t: Tensor) -> Tensor:
+      self.label_embedding = nn.Embedding(num_classes, label_embedding_dim)
+
+      self.model = tMLP(d_in=self.obs_dim + \
+                             self.action_dim * self.horizon_size + \
+                             label_embedding_dim,
+                        d_out=horizon_size * action_dim,
+                        d_model=hidden_dim,
+                        num_layers=num_layers)
+
+    def forward(self, obs: Tensor, x: Tensor, t: Tensor, label: Tensor) -> Tensor:
       batch_size = obs.shape[0]
 
       obs = obs.view(batch_size, self.obs_dim)
       x = x.contiguous().view(batch_size, self.action_dim * self.horizon_size)
       t = t.view(batch_size, self.time_dim)
 
-      h = torch.cat([obs, x], dim=1)
+      label_embedding = self.label_embedding(label)
+
+      h = torch.cat([obs, x, label_embedding], dim=1)
       output = self.model(t, h)
 
       return output.view(batch_size, self.horizon_size, self.action_dim)
 
 class WrappedVF(nn.Module):
-    def __init__(self, model, obs: torch.Tensor):
+    def __init__(self, model, obs: torch.Tensor, label=torch.Tensor):
         super().__init__()
         self.model = model
         self.obs = obs
+        self.label = label
     def forward(self, x: torch.Tensor, t: torch.Tensor):
-        return self.model(obs=self.obs, x=x, t=t)
+        return self.model(obs=self.obs, label=self.label, x=x, t=t)
     
-class ProjectToTangent(nn.Module):
-    """Projects a vector field onto the tangent plane at the input."""
+# class ProjectToTangent(nn.Module):
+#     """Projects a vector field onto the tangent plane at the input."""
 
-    def __init__(self, vecfield: nn.Module, manifold: Manifold=None):
-        super().__init__()
-        self.vecfield = vecfield
-        self.manifold = manifold
+#     def __init__(self, vecfield: nn.Module, manifold: Manifold=None):
+#         super().__init__()
+#         self.vecfield = vecfield
+#         self.manifold = manifold
 
-    def forward(self, obs: Tensor, x: Tensor, t: Tensor) -> Tensor:
-        if self.manifold:
-            x = self.manifold.projx(x)
-            obs = self.manifold.projx(obs)
-            v = self.vecfield(obs, x, t)
-            v = self.manifold.proju(x, v)
-            return v
-        else:
-            return self.vecfield(obs, x, t)
+#     def forward(self, obs: Tensor, x: Tensor, t: Tensor) -> Tensor:
+#         if self.manifold:
+#             x = self.manifold.projx(x)
+#             obs = self.manifold.projx(obs)
+#             v = self.vecfield(obs, x, t)
+#             v = self.manifold.proju(x, v)
+#             return v
+#         else:
+#             return self.vecfield(obs, x, t)
     
 
 if __name__ == '__main__':
-    model = ProjectToTangent(
-        vecfield=StateMLP(action_dim=3, 
-                        time_dim=1, 
-                        hidden_dim=64, 
-                        horizon_size=8),
-        manifold=Sphere)
+    # model = ProjectToTangent(
+    #     vecfield=StateMLP(action_dim=3, 
+    #                     time_dim=1, 
+    #                     hidden_dim=64, 
+    #                     horizon_size=8),
+    #     manifold=Sphere)
+    model = StateMLP(action_dim=3, 
+                    time_dim=1, 
+                    hidden_dim=64, 
+                    horizon_size=8)
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
     print("Learnable param number:", params)

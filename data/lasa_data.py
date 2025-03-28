@@ -1,4 +1,3 @@
-import __main__
 import torch
 import numpy as np
 from torch import nn, Tensor
@@ -88,7 +87,7 @@ class StatePyLASADataset(Dataset):
                 
                 self.demos.append(demo_data)
                 self.horizons.append(self._get_horizons(demo_data))
-                self.labels.append(torch.tensor(label, dtype=torch.long))
+                self.labels.append(torch.tensor(label, dtype=torch.long).repeat(demo_data.shape[:-1]))
 
     def _get_horizons(self, demo):
         N, dim = demo.shape
@@ -123,6 +122,9 @@ class StatePyLASADataset(Dataset):
         result = torch.cat((gt_obs_k, gt_obs_i, torch.tensor(differences, dtype=torch.float32).unsqueeze(1)), dim=1)
 
         return result
+    
+    def get_label_maping(self):
+        return self.class_mapping
 
     def __len__(self):
         return len(self.demos)
@@ -135,8 +137,8 @@ class StatePyLASADataset(Dataset):
             t: Normalized time index.
             label: Class label of the sample.
         """    
-        label = self.labels[idx]
         demo = self.demos[idx]
+        label = self.labels[idx]
         if idx in self.train:
             index_permutation = torch.randperm(demo.shape[0])
         else:
@@ -147,7 +149,8 @@ class StatePyLASADataset(Dataset):
 
 if __name__ == '__main__':
     LASA_datasets = ["Sine", "Angle"]
-    sine_data = StatePyLASADataset(LASA_datasets, 
+    sine_data = StatePyLASADataset(LASA_datasets,
+                               train=list(range(6)),
                                horizon_size=8,
                                scaling_factor=2.0,
                                downsample = 5,

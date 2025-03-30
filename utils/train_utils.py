@@ -25,3 +25,4 @@ def validate(vf_model,
     loss = torch.pow(vf_model(obs=obs, x=a_t, t=t) - da_t, 2).mean()
 
     return loss.item()
+  

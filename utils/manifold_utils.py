@@ -166,6 +166,36 @@ def sample_uniform_geodesic_path(manifold, start, finish, num_points):
     path_sample = path.sample(t=t, x_0=start, x_1=finish)
     return path_sample.x_t.view(num_points, -1)
 
+def run_inference(manifold, model, run_parameters, class_labels, gt_obs, step_size=None):
+    output = dict()
+    if step_size is None:
+        step_size = run_parameters['train']['inf_run_step']
+    for label_name in list(class_labels.keys()):
+        tmp = dict()
+        tmp['results'] = []
+        tmp['samples'] = []
+        tmp['paths'] = []
+        for _ in range(run_parameters['train']['inf_runs_num']):
+            label = torch.tensor(class_labels[label_name],dtype=torch.long).unsqueeze(0)
+            res, samp, paths = infer_model(
+                                    model=model, 
+                                    start=gt_obs[class_labels[label_name],0,:run_parameters['data']['dim']], 
+                                    manifold=manifold,
+                                    label=label,
+                                    dim_manifold=run_parameters['data']['dim'],
+                                    model_horizon=run_parameters['data']['horizon_size'],
+                                    inference_horizon=run_parameters['data']['inference_horizon'],
+                                    sample_points=run_parameters['data']['sample_points'],
+                                    mean=run_parameters['data']['mean'],
+                                    std=run_parameters['data']['std'],
+                                    step_size=step_size
+                                )
+            tmp['results'].append(res)
+            tmp['samples'].append(samp)
+            tmp['paths'].append(paths)
+        output[label_name] = tmp
+    return output
+
 
 # def sample_from_gt_obs(obs):
 #     """

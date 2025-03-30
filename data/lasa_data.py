@@ -91,7 +91,9 @@ class StatePyLASADataset(Dataset):
 
     def _get_horizons(self, demo):
         N, dim = demo.shape
-        padded_demo = torch.nn.functional.pad(demo, (0, 0, 0, self.horizon_size), value=0)
+        last_value = demo[-1].unsqueeze(0)
+        padding = last_value.repeat(self.horizon_size, 1)
+        padded_demo = torch.cat([demo, padding], dim=0)
         strides = (padded_demo.stride(0), padded_demo.stride(0), padded_demo.stride(1))
         return torch.as_strided(padded_demo, size=(N, self.horizon_size, dim), stride=strides)
 

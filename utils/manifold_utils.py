@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from tqdm import trange
+from tqdm import trange, tqdm
 
 import sys
 import os
@@ -11,6 +11,8 @@ sys.path.append(ROOT_DIR)
 from models.state_mlp import WrappedVF
 from flow_matching.solver.solver import Solver
 from flow_matching.utils.manifolds import Manifold, Sphere
+from flow_matching.path import GeodesicProbPath
+from flow_matching.path.scheduler import CondOTScheduler
 from flow_matching.solver import RiemannianODESolver
 from data.lasa_data import wrap
 
@@ -64,8 +66,12 @@ def infer_model(model,
   samples[0] = start.clone()
 
   step_idx = 0
-  #print(sample_points, inference_horizon)
-  for i in trange(sample_points//inference_horizon):
+  paths = []
+  if return_intermediates:
+      T = torch.linspace(0, 1, int(1/step_size))
+  else:
+      T = torch.tensor([0.0,1.0])
+  for i in tqdm(range(sample_points//inference_horizon), desc="Sampling trajectory", leave=False):
     c, tau_minus_c = sample_context(idx=step_idx, sample_points=sample_points)
     context = torch.cat([results[step_idx], results[c], tau_minus_c]).unsqueeze(0)
 
@@ -84,24 +90,26 @@ def infer_model(model,
     
     solver = RiemannianODESolver(velocity_model=wrapped_vf, 
                                  manifold=manifold)
-
-    #T = torch.linspace(0, 1, 3)  # sample times
-
-    a_infer = solver.sample(
+    path_sample = solver.sample(
                     x_init=a0,
                     step_size=step_size,
                     method=method,
                     return_intermediates=return_intermediates,
                     verbose=verbose,
+                    time_grid = T 
                 )
-    
+    if return_intermediates:
+        a_infer = path_sample[-1]
+        paths.append(path_sample)
+    else:
+        a_infer = path_sample
     new_idx = step_idx + inference_horizon
     if new_idx < results.shape[0]:
         results[step_idx + 1 : new_idx + 1] = a_infer.squeeze()[:inference_horizon].clone()
         samples[step_idx + 1 : new_idx + 1] = a0.squeeze()[:inference_horizon].clone()
 
     step_idx = new_idx 
-  return results, samples
+  return results, samples, paths
 
 def step(vf, batch, 
          run_parameters, 
@@ -139,6 +147,25 @@ def step(vf, batch,
 
     loss = torch.pow(result_vf - target_vf, 2).mean()
     return loss
+
+def curve_geodesic_MSE(manifold, x_curve, y_curve):
+    assert(x_curve.shape == y_curve.shape)
+    dist = np.zeros(x_curve.shape[0])
+    for i in range(x_curve.shape[0]):
+        dist[i]=manifold.dist(x_curve[i], y_curve[i])
+    return (dist[~np.isnan(dist)]**2).mean()
+
+def sample_uniform_geodesic_path(manifold, start, finish, num_points):
+    assert(start.shape == finish.shape)
+    assert(num_points >= 2)
+    path = GeodesicProbPath(scheduler=CondOTScheduler(), manifold=manifold)
+    t = torch.linspace(0.0, 1.0, num_points)
+    start = start.unsqueeze(0)
+    start = start.repeat(num_points, 1)
+    finish = finish.unsqueeze(0).repeat(num_points, 1)
+    path_sample = path.sample(t=t, x_0=start, x_1=finish)
+    return path_sample.x_t.view(num_points, -1)
+
 
 # def sample_from_gt_obs(obs):
 #     """
@@ -206,7 +233,12 @@ def step(vf, batch,
 #     return error
    
 if __name__ == '__main__':
-   start = torch.randn(1,2)
-   print(start)
-   start = wrap(Sphere(), start, dim_from=2, dim_to=3)
-   print(start)
+    start = torch.randn(1,2)
+    finish = torch.rand(1,2)
+    print(start, finish)
+    start = wrap(Sphere(), start, dim_from=2, dim_to=3)
+    finish = wrap(Sphere(), finish, dim_from=2, dim_to=3)
+    print(start, finish)
+    path1 = sample_uniform_geodesic_path(Sphere(), start[0], finish[0], 100)
+    path2 = path1
+    print(curve_geodesic_MSE(manifold=Sphere(), x_curve=path1, y_curve=path2))

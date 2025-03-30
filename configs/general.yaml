@@ -6,6 +6,7 @@ train:
   print_every : 5000
   device : 'cpu'
   inf_runs_num : 3
+  inf_run_step : 0.1
 
 model:
   hidden_dim : 96
@@ -18,11 +19,11 @@ data:
   datasets: ["Sine", "JShape"]
   horizon_size : 20
   inference_horizon : 10
-  scale_factor : 1.5
+  scale_factor : 4 #1.5
   downsample : 5
   sample_points : 200
   mean : 0.0
-  std : 1.0
+  std : 2.5 #1.0
 
 ema:
   warmup : 1000

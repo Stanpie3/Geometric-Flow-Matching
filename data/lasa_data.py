@@ -20,6 +20,8 @@ def wrap(manifold, samples, dim_from, dim_to):
     """
     k = dim_to - dim_from
 
+    # print(dim_to, dim_from)
+
     if k <= 0:
         raise ValueError("dim_to must be greater than dim_from")
 

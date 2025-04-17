@@ -1,9 +1,9 @@
 train:
   lr : 1.0e-4
-  epochs : 300001
+  epochs : 10001
   batch_size : 100
-  inf_every : 10000
-  print_every : 10000
+  inf_every : 1000
+  print_every : 1000
   device : 'cpu'
   inf_runs_num : 3
   inf_run_step : 0.05
@@ -14,9 +14,9 @@ model:
   embed_dim : 24
 
 data:
-  dim : 3
+  dim : 4
   manifold: Sphere
-  datasets: ["Sine", "JShape", "Angle", "PShape"]
+  datasets: ["Sine"] #, "JShape", "Angle", "PShape"]
   horizon_size : 20
   inference_horizon : 10
   scale_factor : 1.5
@@ -31,5 +31,5 @@ ema:
   decay : 0.999
 
 scheduler:
-  step : 100000
+  step : 3000
   gamma : 0.5

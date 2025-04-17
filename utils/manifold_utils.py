@@ -80,7 +80,7 @@ def infer_model(model,
                            label=label)
     wrapped_vf.eval()
 
-    a0 = sample_normal_source(dim=start.shape[-1]-1, 
+    a0 = sample_normal_source(dim=2,# start.shape[-1]-1, 
                               horizon=model_horizon, 
                               manifold=manifold, 
                               mean=mean,
@@ -127,11 +127,12 @@ def step(vf, batch,
     batch_size=a1.shape[0]
 
     a0 = sample_normal_source(batch_size=batch_size,
-                                dim=run_parameters['data']['dim']-1, 
+                                dim=2, #run_parameters['data']['dim']-1, 
                                 horizon=run_parameters['data']['horizon_size'], 
                                 manifold=manifold, 
                                 mean=run_parameters['data']['mean'],
-                                std=run_parameters['data']['std'])
+                                std=run_parameters['data']['std'],
+                                dim_to=run_parameters['data']['dim'])
     
     t = torch.rand(a0.shape[0]).to(device)
     t_flat = t.unsqueeze(1).repeat(1, a0.shape[1]).view(a0.shape[0] * a0.shape[1])

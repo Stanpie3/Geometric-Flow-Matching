@@ -1,9 +1,6 @@
 data:
   datasets:
   - Sine
-  - JShape
-  - Angle
-  - PShape
   dim: 3
   downsample: 5
   horizon_size: 20
@@ -27,9 +24,9 @@ scheduler:
 train:
   batch_size: 100
   device: cpu
-  epochs: 300001
-  inf_every: 10000
+  epochs: 10001
+  inf_every: 1000
   inf_run_step: 0.05
   inf_runs_num: 3
   lr: 0.0001
-  print_every: 10000
+  print_every: 1000

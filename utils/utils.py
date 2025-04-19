@@ -11,6 +11,50 @@ sys.path.append(ROOT_DIR)
 from utils.schemes import Euler, RK4
 from models.state_mlp import WrappedVF
 
+def sample_normal_source_euc(batch_size:int=1,
+                            dim:int=2,
+                            horizon:int=1,
+                            mean:float=0.0, 
+                            std:float=1.0):
+    samples = torch.randn((batch_size, 1, dim)) * std + mean
+    samples = samples.repeat(1, horizon, 1)
+    return samples
+
+def step(vf, batch, 
+         run_parameters, 
+         manifold,
+         path,
+         device='cpu'):
+    obs, a1, label = batch
+    obs, a1, label = obs.to(device), a1.to(device), label.to(device)
+
+    label = label.view(-1)
+    obs = obs.view(-1, obs.shape[-1])
+    a1 = a1.view(-1, a1.shape[-2], a1.shape[-1])
+
+    batch_size=a1.shape[0]
+
+    a0 = sample_normal_source_euc(batch_size=batch_size,
+                                dim=2,
+                                horizon=run_parameters['data']['horizon_size'], 
+                                mean=run_parameters['data']['mean'],
+                                std=run_parameters['data']['std'])
+    
+    t = torch.rand(a0.shape[0]).to(device)
+    t_flat = t.unsqueeze(1).repeat(1, a0.shape[1]).view(a0.shape[0] * a0.shape[1])
+
+    path_sample = path.sample(t=t_flat, 
+                            x_0=a0.view(a0.shape[0]*a0.shape[1], a0.shape[2]), 
+                            x_1=a1.view(a0.shape[0]*a0.shape[1], a0.shape[2]))
+
+    result_vf = vf(obs=obs, label=label, x=path_sample.x_t.view(a0.shape), t=t)
+    result_vf = manifold.proju(path_sample.x_t.view(a0.shape), result_vf)
+
+    target_vf = path_sample.dx_t.view(a0.shape)
+
+    loss = torch.pow(result_vf - target_vf, 2).mean()
+    return loss
+
 def infer_model(model, 
                 start, 
                 scheme=Euler, 

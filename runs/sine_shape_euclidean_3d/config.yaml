@@ -1,0 +1,34 @@
+data:
+  datasets:
+  - Sine
+  dim: 3
+  downsample: 5
+  horizon_size: 20
+  inference_horizon: 10
+  manifold_data: Sphere
+  manifold_inference: Euclidean
+  mean: 0.0
+  sample_points: 200
+  scale_factor: 1.5
+  std: 1.0
+  type_inference: s2_to_tang
+ema:
+  decay: 0.999
+  update: 5
+  warmup: 300
+model:
+  embed_dim: 24
+  hidden_dim: 96
+  num_layers: 6
+scheduler:
+  gamma: 0.5
+  step: 3000
+train:
+  batch_size: 100
+  device: cpu
+  epochs: 5001
+  inf_every: 500
+  inf_run_step: 0.05
+  inf_runs_num: 3
+  lr: 0.0001
+  print_every: 500

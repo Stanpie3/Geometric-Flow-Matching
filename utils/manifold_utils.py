@@ -23,7 +23,7 @@ def sample_normal_source(batch_size:int=1,
                         std:float=1.0, 
                         manifold:Manifold=None,
                         dim_to = 3):
-    samples = torch.randn((batch_size, 1, dim)) * std + mean ##dangerous. Logic: sample on tangent + project
+    samples = torch.randn((batch_size, 1, dim)) * std + mean
     samples = samples.repeat(1, horizon, 1)
 
     
@@ -196,6 +196,8 @@ def run_inference(manifold, model, run_parameters, class_labels, gt_obs, step_si
             tmp['paths'].append(paths)
         output[label_name] = tmp
     return output
+
+# def uncertainty_of_model(vf, gt_obs, )
 
 
 # def sample_from_gt_obs(obs):

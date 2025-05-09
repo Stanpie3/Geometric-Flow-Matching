@@ -23,7 +23,12 @@ def plot_flow_on_sphere(results_list,
                         plot_samples=True,
                         elev=-90,
                         azim=0,
-                        dynamic=False):
+                        dynamic=False,
+                        title="Policy on the sphere",
+                        one_canvas=False,
+                        line_width_traj=1,
+                        line_width_gt=1,
+                        line_type='.--'):
     """
     Plots multiple flows from sampled points to results on the 2-sphere.
 
@@ -35,21 +40,30 @@ def plot_flow_on_sphere(results_list,
         elev (float): Elevation angle for the 3D view.
         azim (float): Azimuthal angle for the 3D view.
         dynamic (bool): If True, adds interactive sliders for elev and azim.
+        one_canvas (bool): If True, plots all trajectories on a single canvas.
     """
-    
+    if one_canvas:
+        assert not plot_samples, "Cannot plot samples when one_canvas is True."
+
     def plot_sphere(elev, azim):
-        num_plots = len(results_list)
-        fig, axes = plt.subplots(1, num_plots, subplot_kw={'projection': '3d'}, figsize=(4 * num_plots, 4))
-        if num_plots == 1:
-            axes = [axes]
+        if one_canvas:
+            fig = plt.figure(figsize=(6, 6))
+            ax = fig.add_subplot(111, projection='3d')
+            axes = [ax]
+        else:
+            num_plots = len(results_list)
+            fig, axes = plt.subplots(1, num_plots, subplot_kw={'projection': '3d'}, figsize=(4 * num_plots, 4))
+            if num_plots == 1:
+                axes = [axes]
 
         gt_samples_np = gt_samples.cpu().numpy() if isinstance(gt_samples, torch.Tensor) else gt_samples
 
-        for ax, results, samples in zip(axes, results_list, samples_list):
+        for idx, (results, samples) in enumerate(zip(results_list, samples_list)):
             results_np = results.cpu().numpy() if isinstance(results, torch.Tensor) else results
             samples_np = samples.cpu().numpy() if isinstance(samples, torch.Tensor) else samples
+            ax = axes[0] if one_canvas else axes[idx]
 
-            if plot_samples:
+            if not one_canvas and plot_samples:
                 for i in range(samples_np.shape[0]):
                     ax.plot([samples_np[i, 0], results_np[i, 0]],
                             [samples_np[i, 1], results_np[i, 1]],
@@ -58,9 +72,35 @@ def plot_flow_on_sphere(results_list,
 
                 ax.scatter(samples_np[:, 0], samples_np[:, 1], samples_np[:, 2], color="green", s=20, label="Base Distribution")
 
-            ax.plot(results_np[:, 0], results_np[:, 1], results_np[:, 2], '--.', color="blue", linewidth=1, label="Learned Path")
 
-            ax.plot(gt_samples_np[:, 0], gt_samples_np[:, 1], gt_samples_np[:, 2], color="red", linewidth=1, label="Ground Truth")
+            if one_canvas:
+                ax.plot(results_np[:, 0], results_np[:, 1], results_np[:, 2], line_type, color="blue", 
+                    linewidth=line_width_traj)
+            else:
+                ax.plot(results_np[:, 0], results_np[:, 1], results_np[:, 2], line_type, color="blue", 
+                        linewidth=line_width_traj, label="Learned Path")
+
+            if not one_canvas:
+                ax.plot(gt_samples_np[:, 0], gt_samples_np[:, 1], gt_samples_np[:, 2], color="red", linewidth=line_width_gt, label="Ground Truth")
+
+                # Sphere wireframe
+                u = np.linspace(0, 2 * np.pi, 100)
+                v = np.linspace(0, np.pi, 50)
+                x = np.outer(np.cos(u), np.sin(v))
+                y = np.outer(np.sin(u), np.sin(v))
+                z = np.outer(np.ones(np.size(u)), np.cos(v))
+                ax.plot_wireframe(x, y, z, color="gray", alpha=0.2)
+
+                ax.view_init(elev=elev, azim=azim)
+                ax.set_xlabel("X")
+                ax.set_ylabel("Y")
+                ax.set_zlabel("Z")
+                ax.set_title(title)
+                ax.legend()
+
+        if one_canvas:
+            ax = axes[0]
+            ax.plot(gt_samples_np[:, 0], gt_samples_np[:, 1], gt_samples_np[:, 2], color="red", linewidth=line_width_gt, label="Ground Truth")
 
             # Sphere wireframe
             u = np.linspace(0, 2 * np.pi, 100)
@@ -71,11 +111,10 @@ def plot_flow_on_sphere(results_list,
             ax.plot_wireframe(x, y, z, color="gray", alpha=0.2)
 
             ax.view_init(elev=elev, azim=azim)
-
             ax.set_xlabel("X")
             ax.set_ylabel("Y")
             ax.set_zlabel("Z")
-            ax.set_title(label + " Flow on the 2-Sphere")
+            ax.set_title(title)
             ax.legend()
 
         plt.tight_layout()
@@ -99,6 +138,7 @@ def plot_flow_on_sphere(results_list,
         display(ui, out)
     else:
         plot_sphere(elev, azim)
+
 
 
 def plot_3d_points(points, title="3D Scatter Plot", color="blue", s=20, show_grid=True):

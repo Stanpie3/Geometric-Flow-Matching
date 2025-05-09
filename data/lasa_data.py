@@ -20,8 +20,6 @@ def wrap(manifold, samples, dim_from, dim_to):
     """
     k = dim_to - dim_from
 
-    # print(dim_to, dim_from)
-
     if k <= 0:
         raise ValueError("dim_to must be greater than dim_from")
 
@@ -38,9 +36,7 @@ class StatePyLASADataset(Dataset):
                  normalize: bool = True,
                  scaling_factor: float = 1.0,
                  downsample: int = 1,
-                 manifold_data: Manifold = None,
-                 manifold_inference: Manifold = None,
-                 type_inference : str = None,
+                 manifold: Manifold = None,
                  dim_from: int = 2,
                  dim_to: int = 3,
                  dim_infer: int = 3,
@@ -60,19 +56,13 @@ class StatePyLASADataset(Dataset):
         """
         self.horizon_size = horizon_size
         self.downsample = downsample
-        self.manifold_data = manifold_data
-        self.manifold_inference = manifold_inference
-        self.type_inference = type_inference
+        self.manifold = manifold
         self.dim_from = dim_from
         self.dim_to = dim_to
         self.dim_infer = dim_infer
         self.train = train
-        if len(start_points) != 0:
-            self.start_points = start_points
-        else:
-            self.start_points = {}
-            for dataset_name in dataset_names:
-                self.start_points[dataset_name] = None
+        self.start_points = start_points
+
         
         self.demos = []
         self.demos_gt = []
@@ -93,30 +83,15 @@ class StatePyLASADataset(Dataset):
                     demo_data = self._normalize(demo_data, dataset_name)
                 demo_data = demo_data * scaling_factor
                 demo_data = torch.tensor(demo_data, dtype=torch.float32)
-                if self.manifold_data:
-                    demo_data = wrap(manifold=self.manifold_data, 
+                if self.manifold:
+                    demo_data = wrap(manifold=self.manifold, 
                                     samples=demo_data,
                                     dim_from=self.dim_from, 
                                     dim_to=self.dim_to)
-                    if self.start_points[dataset_name] is None:
-                        self.start_points[dataset_name] = demo_data[0]
-                if self.manifold_inference:
-                    self.demos_gt.append(demo_data)
-                    demo_data = self.place_data_to_inference_manifold(demo_data=demo_data,
-                                                                      dataset_name=dataset_name)
                 self.demos.append(demo_data)
                 self.horizons.append(self._get_horizons(demo_data))
                 self.labels.append(torch.tensor(label, dtype=torch.long).repeat(demo_data.shape[:-1]))
-    
-    def place_data_to_inference_manifold(self, demo_data, dataset_name):
-        if self.type_inference == 's2_to_tang':
-            tangent_base = self.start_points[dataset_name]
-            tangent_base = tangent_base.unsqueeze(0).repeat(demo_data.shape[0], 1)
-            return self.manifold_data.logmap(tangent_base, demo_data)
         
-    def return_data_from_inference_manifold(self, result_data, start=None):
-        if self.type_inference == 's2_to_tang':
-            return self.manifold_data.expmap(start, result_data)
 
     def _get_horizons(self, demo):
         N, dim = demo.shape

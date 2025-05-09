@@ -1,9 +1,9 @@
 train:
-  lr : 1.0e-4
-  epochs : 5001
+  lr : 2.0e-4
+  epochs : 25001
   batch_size : 100
-  inf_every : 500
-  print_every : 500
+  inf_every : 5000
+  print_every : 5000
   device : 'cpu'
   inf_runs_num : 3
   inf_run_step : 0.05
@@ -16,22 +16,22 @@ model:
 data:
   dim : 3
   manifold_data: Sphere
-  manifold_inference: Euclidean #None
-  type_inference: s2_to_tang #None
-  datasets: ["Sine"] #, "JShape", "Angle", "PShape"]
-  horizon_size : 20
-  inference_horizon : 10
-  scale_factor : 1.5
+  manifold_inference: None # None Euclidean
+  type_inference: None #None s2_to_tang
+  datasets: ["Sine"] # "PShape" "Sine" "JShape", "Angle", "PShape"]
+  horizon_size : 8
+  inference_horizon : 4
+  scale_factor : 2.0
   downsample : 5
   sample_points : 200
   mean : 0.0
   std : 1.0
 
 ema:
-  warmup : 300
+  warmup : 1000
   update : 5
   decay : 0.999
 
 scheduler:
-  step : 3000
+  step : 5000
   gamma : 0.5

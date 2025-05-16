@@ -3,32 +3,30 @@ data:
   - Sine
   dim: 3
   downsample: 5
-  horizon_size: 8
-  inference_horizon: 4
-  manifold_data: Sphere
-  manifold_inference: None
+  horizon_size: 20
+  inference_horizon: 10
+  manifold: Euclidean
   mean: 0.0
-  sample_points: 200
+  sample_points: 300
   scale_factor: 2.0
-  std: 1.0
-  type_inference: None
+  std: 0.5
 ema:
   decay: 0.999
   update: 5
-  warmup: 1000
+  warmup: 2000
 model:
   embed_dim: 24
   hidden_dim: 96
   num_layers: 6
 scheduler:
   gamma: 0.5
-  step: 5000
+  step: 10000
 train:
   batch_size: 100
   device: cpu
-  epochs: 25001
-  inf_every: 5000
+  epochs: 100001
+  inf_every: 4000
   inf_run_step: 0.05
   inf_runs_num: 3
-  lr: 0.0002
-  print_every: 5000
+  lr: 0.0001
+  print_every: 4000

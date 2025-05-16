@@ -1,30 +1,19 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-
 from mpl_toolkits.mplot3d import Axes3D
-
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
-import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import torch
 import ipywidgets as widgets
 from IPython.display import display
 
 def plot_flow_on_sphere(results_list, 
-                        samples_list, 
-                        gt_samples,
-                        label, 
+                        samples_list=None, 
+                        gt_samples=None,
+                        label=None, 
                         plot_samples=True,
                         elev=-90,
                         azim=0,
                         dynamic=False,
-                        title="Policy on the sphere",
+                        title="Policy",
                         one_canvas=False,
                         line_width_traj=1,
                         line_width_gt=1,
@@ -139,8 +128,6 @@ def plot_flow_on_sphere(results_list,
     else:
         plot_sphere(elev, azim)
 
-
-
 def plot_3d_points(points, title="3D Scatter Plot", color="blue", s=20, show_grid=True):
     """
     Plots a set of 3D points interactively.
@@ -174,6 +161,84 @@ def plot_3d_points(points, title="3D Scatter Plot", color="blue", s=20, show_gri
     ax.set_zlim(mid[2] - max_range, mid[2] + max_range)
 
     plt.show()
+
+def plot_3d_points_interactive(points_list, title="3D Scatter Plot", colors=None, s=20, show_grid=True, same_canvas=True):
+    """
+    Plots one or more sets of 3D points in a Jupyter Notebook with interactive view angle sliders.
+
+    Args:
+        points_list (list of torch.Tensor or np.ndarray): Each tensor/array should be of shape (N, 3).
+        title (str): Title of the plot (for same_canvas=True) or plot prefix (for same_canvas=False).
+        colors (list of str or str): List of colors or a single color for all sets.
+        s (int): Size of scatter points.
+        show_grid (bool): Whether to show grid lines.
+        same_canvas (bool): If True, plots all point sets on the same canvas. Else, creates separate plots.
+    """
+    if not isinstance(points_list, list):
+        points_list = [points_list]
+
+    # Normalize and convert all to numpy
+    points_list = [p.cpu().numpy() if isinstance(p, torch.Tensor) else p for p in points_list]
+
+    # Default color setup
+    if colors is None:
+        cmap = plt.cm.get_cmap("tab10")
+        colors = [cmap(i % 10) for i in range(len(points_list))]
+    elif isinstance(colors, str):
+        colors = [colors] * len(points_list)
+
+    # Sliders for elevation and azimuth
+    elev_slider = widgets.IntSlider(value=30, min=-180, max=180, step=45, description='Elevation:')
+    azim_slider = widgets.IntSlider(value=45, min=-180, max=180, step=45, description='Azimuth:')
+
+    def plot(elev, azim):
+        if same_canvas:
+            fig = plt.figure(figsize=(6, 6))
+            ax = fig.add_subplot(111, projection="3d")
+
+            # Combine all points to determine global limits
+            all_points = np.vstack(points_list)
+            max_range = (all_points.max() - all_points.min()) / 2
+            mid = all_points.mean(axis=0)
+
+            for pts, col in zip(points_list, colors):
+                ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], color=col, s=s)
+
+            ax.set_xlim(mid[0] - max_range, mid[0] + max_range)
+            ax.set_ylim(mid[1] - max_range, mid[1] + max_range)
+            ax.set_zlim(mid[2] - max_range, mid[2] + max_range)
+            ax.set_title(title)
+            ax.set_xlabel("X")
+            ax.set_ylabel("Y")
+            ax.set_zlabel("Z")
+            ax.grid(show_grid)
+            ax.view_init(elev=elev, azim=azim)
+
+            plt.show()
+
+        else:
+            for i, (pts, col) in enumerate(zip(points_list, colors)):
+                fig = plt.figure(figsize=(5, 5))
+                ax = fig.add_subplot(111, projection="3d")
+                ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], color=col, s=s)
+
+                max_range = (pts.max() - pts.min()) / 2
+                mid = pts.mean(axis=0)
+                ax.set_xlim(mid[0] - max_range, mid[0] + max_range)
+                ax.set_ylim(mid[1] - max_range, mid[1] + max_range)
+                ax.set_zlim(mid[2] - max_range, mid[2] + max_range)
+
+                ax.set_title(f"{title} #{i+1}")
+                ax.set_xlabel("X")
+                ax.set_ylabel("Y")
+                ax.set_zlabel("Z")
+                ax.grid(show_grid)
+                ax.view_init(elev=elev, azim=azim)
+
+                plt.show()
+
+    out = widgets.interactive_output(plot, {'elev': elev_slider, 'azim': azim_slider})
+    display(widgets.VBox([elev_slider, azim_slider]), out)
 
 
 def plot_flow(results_list, 

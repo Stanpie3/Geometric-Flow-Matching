@@ -149,6 +149,59 @@ def step(vf, batch,
     loss = torch.pow(result_vf - target_vf, 2).mean()
     return loss
 
+def step_tangent(vf, 
+                 batch,
+                 start_point,
+                 run_parameters, 
+                 manifold,
+                 result_vf_manifold,
+                 path,
+                 device='cpu'):
+    
+    obs, a1, label = batch
+    obs, a1, label = obs.to(device), a1.to(device), label.to(device)
+
+    obs_tang = torch.zeros_like(obs)
+    obs_tang[:, :, :3] = manifold.logmap(start_point, obs[:, :, :3])
+    obs_tang[:, :, 3:6] = manifold.logmap(start_point, obs[:, :, 3:6])
+    obs_tang[:, :, 6:] = obs[:,:,6:]
+    a1_tang = manifold.logmap(start_point, a1)
+
+    # print(obs.shape, a1.shape)
+    # print(obs_tang.shape, a1_tang.shape)
+
+    label = label.view(-1)
+    obs_tang = obs_tang.view(-1, obs.shape[-1])
+    a1_tang = a1_tang.view(-1, a1.shape[-2], a1.shape[-1])
+
+    batch_size=a1_tang.shape[0]
+
+    a0 = sample_normal_source(batch_size=batch_size,
+                                dim=2, #run_parameters['data']['dim']-1, 
+                                horizon=run_parameters['data']['horizon_size'], 
+                                manifold=manifold, 
+                                mean=run_parameters['data']['mean'],
+                                std=run_parameters['data']['std'],
+                                dim_to=run_parameters['data']['dim'])
+    
+    a0_tang = manifold.logmap(start_point, a0)
+    # print(a0.shape, a0_tang.shape)
+    
+    t = torch.rand(a0.shape[0]).to(device)
+    t_flat = t.unsqueeze(1).repeat(1, a0.shape[1]).view(a0.shape[0] * a0.shape[1])
+
+    path_sample = path.sample(t=t_flat, 
+                            x_0=a0_tang.view(a0.shape[0]*a0.shape[1], a0.shape[2]), 
+                            x_1=a1_tang.view(a0.shape[0]*a0.shape[1], a0.shape[2]))
+
+    result_vf = vf(obs=obs_tang, label=label, x=path_sample.x_t.view(a0.shape), t=t)
+    result_vf = manifold.proju(start_point, result_vf)
+
+    target_vf = path_sample.dx_t.view(a0.shape)
+
+    loss = torch.pow(result_vf - target_vf, 2).mean()
+    return loss
+
 def curve_geodesic_MSE(manifold, x_curve, y_curve):
     assert(x_curve.shape == y_curve.shape)
     dist = np.zeros(x_curve.shape[0])

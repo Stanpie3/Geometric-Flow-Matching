@@ -15,7 +15,7 @@ model:
 
 data:
   dim : 3
-  manifold: Sphere
+  manifold: Euclidean
   datasets: ["Sine"] #, "JShape", "Angle", "PShape"]
   horizon_size : 20
   inference_horizon : 10

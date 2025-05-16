@@ -3,7 +3,7 @@ import numpy as np
 from torch import nn, Tensor
 from torch.utils.data import Dataset, DataLoader
 import pyLasaDataset as lasa
-from flow_matching.utils.manifolds import Manifold
+from flow_matching.utils.manifolds import Manifold, Euclidean, Sphere
 
 def wrap(manifold, samples, dim_from, dim_to):
     """
@@ -161,9 +161,9 @@ if __name__ == '__main__':
                                horizon_size=8,
                                scaling_factor=2.0,
                                downsample = 5,
-                               manifold=None,
+                               manifold=Euclidean(),
                                dim_to=3,
                                normalize=True)
     obs, a, label = next(iter(sine_data))
     print(obs.shape, a.shape, label)
-    print(a[-10:])
+    print(obs[:, :3])

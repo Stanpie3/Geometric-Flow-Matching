@@ -1,16 +1,16 @@
 train:
   lr : 1.0e-4
-  epochs : 100001
+  epochs : 200001
   batch_size : 100
   inf_every : 4000
   print_every : 4000
   device : 'cpu'
-  inf_runs_num : 3
-  inf_run_step : 0.05
+  inf_runs_num : 1
+  inf_run_step : 0.01
 
 model:
   hidden_dim : 96
-  num_layers : 6
+  num_layers : 8
   embed_dim : 24
 
 data:
@@ -31,5 +31,5 @@ ema:
   decay : 0.999
 
 scheduler:
-  step : 10000
+  step : 20000
   gamma : 0.5

@@ -127,23 +127,25 @@ class WrappedVF(nn.Module):
     def forward(self, x: torch.Tensor, t: torch.Tensor):
         return self.model(obs=self.obs, label=self.label, x=x, t=t)
     
-# class ProjectToTangent(nn.Module):
-#     """Projects a vector field onto the tangent plane at the input."""
+class ProjectToTangent(nn.Module):
+    """Projects a vector field onto the tangent plane at the input."""
 
-#     def __init__(self, vecfield: nn.Module, manifold: Manifold=None):
-#         super().__init__()
-#         self.vecfield = vecfield
-#         self.manifold = manifold
+    def __init__(self, vecfield: nn.Module, manifold: Manifold=None, tangent_point=None):
+        super().__init__()
+        self.vecfield = vecfield
+        self.manifold = manifold
+        self.tangent_point = tangent_point
 
-#     def forward(self, obs: Tensor, x: Tensor, t: Tensor) -> Tensor:
-#         if self.manifold:
-#             x = self.manifold.projx(x)
-#             obs = self.manifold.projx(obs)
-#             v = self.vecfield(obs, x, t)
-#             v = self.manifold.proju(x, v)
-#             return v
-#         else:
-#             return self.vecfield(obs, x, t)
+    def forward(self, obs: Tensor, x: Tensor, t: Tensor, label: Tensor) -> Tensor:
+        if self.manifold:
+            v = self.vecfield(obs=obs, x=x, t=t, label=label)
+            if self.tangent_point is not None:
+                v = self.manifold.proju(self.tangent_point, v)
+            else:
+                v = self.manifold.proju(x, v)
+            return v
+        else:
+            return self.vecfield(obs=obs, x=x, t=t, label=label)
     
 
 if __name__ == '__main__':

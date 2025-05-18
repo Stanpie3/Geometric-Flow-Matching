@@ -8,9 +8,9 @@ import os
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(ROOT_DIR)
 
-from models.state_mlp import WrappedVF
+from models.state_mlp import WrappedVF, ProjectToTangent
 from flow_matching.solver.solver import Solver
-from flow_matching.utils.manifolds import Manifold, Sphere
+from flow_matching.utils.manifolds import Manifold, Sphere, Euclidean
 from flow_matching.path import GeodesicProbPath
 from flow_matching.path.scheduler import CondOTScheduler
 from flow_matching.solver import RiemannianODESolver
@@ -75,7 +75,8 @@ def infer_model(model,
     c, tau_minus_c = sample_context(idx=step_idx, sample_points=sample_points)
     context = torch.cat([results[step_idx], results[c], tau_minus_c]).unsqueeze(0)
 
-    wrapped_vf = WrappedVF(model=model,
+    wrapped_vf = WrappedVF(model=ProjectToTangent(vecfield=model, 
+                                                  manifold=manifold),
                            obs=context,
                            label=label)
     wrapped_vf.eval()
@@ -110,6 +111,70 @@ def infer_model(model,
 
     step_idx = new_idx 
   return results, samples, paths
+
+def infer_model_tangent(model, 
+                        start,
+                        dim_manifold,
+                        label,
+                        method:str="midpoint",
+                        manifold:Manifold=Sphere(),
+                        tangent_manifold:Manifold=Euclidean(),
+                        step_size:float=0.01, 
+                        sample_points:int=1000, 
+                        inference_horizon:int=4,
+                        model_horizon:int=8,
+                        mean:float=0.0,
+                        std:float=1.0,
+                        verbose=False):
+  start_point_sphere = start.squeeze()
+  start = manifold.logmap(start_point_sphere, start_point_sphere)
+  results = torch.zeros((sample_points + 1,) + start.shape, 
+                        dtype=start.dtype, 
+                        device=start.device)
+  samples = torch.zeros_like(results)
+
+  results[0] = start.clone()
+  samples[0] = start.clone()
+
+  step_idx = 0
+  T = torch.tensor([0.0,1.0])
+  for i in tqdm(range(sample_points//inference_horizon), desc="Sampling trajectory", leave=False):
+    c, tau_minus_c = sample_context(idx=step_idx, sample_points=sample_points)
+    context = torch.cat([results[step_idx], results[c], tau_minus_c]).unsqueeze(0)
+
+    wrapped_vf = WrappedVF(model=ProjectToTangent(vecfield=model, 
+                                                  manifold=tangent_manifold), #manifold, 
+                                                #   tangent_point=start_point_sphere),
+                           obs=context,
+                           label=label)
+    wrapped_vf.eval()
+
+    a0 = sample_normal_source(dim=3,# 2,# start.shape[-1]-1, ###############################################
+                              horizon=model_horizon, 
+                              manifold=None, # manifold  #############################################3
+                              mean=mean,
+                              std=std,
+                              dim_to=dim_manifold)
+    
+    a0_tang = a0 #manifold.logmap(start_point_sphere, a0) ######################################3333
+    
+    solver = RiemannianODESolver(velocity_model=wrapped_vf, 
+                                 manifold=tangent_manifold)
+    a_infer = solver.sample(
+                    x_init=a0_tang,
+                    step_size=step_size,
+                    method=method,
+                    return_intermediates=False,
+                    verbose=verbose,
+                    time_grid = T 
+                )
+    new_idx = step_idx + inference_horizon
+    if new_idx < results.shape[0]:
+        results[step_idx + 1 : new_idx + 1] = manifold.proju(start_point_sphere, a_infer.squeeze()[:inference_horizon].clone()) # a_infer.squeeze()[:inference_horizon].clone() 
+        samples[step_idx + 1 : new_idx + 1] = a0.squeeze()[:inference_horizon].clone()
+
+    step_idx = new_idx 
+  return results, samples
 
 def step(vf, batch, 
          run_parameters, 
@@ -177,14 +242,14 @@ def step_tangent(vf,
     batch_size=a1_tang.shape[0]
 
     a0 = sample_normal_source(batch_size=batch_size,
-                                dim=2, #run_parameters['data']['dim']-1, 
+                                dim=3, #2  #run_parameters['data']['dim']-1, ##################################3333
                                 horizon=run_parameters['data']['horizon_size'], 
-                                manifold=manifold, 
+                                manifold=None, # manifold  #############################################3
                                 mean=run_parameters['data']['mean'],
                                 std=run_parameters['data']['std'],
                                 dim_to=run_parameters['data']['dim'])
     
-    a0_tang = manifold.logmap(start_point, a0)
+    a0_tang = a0 # manifold.logmap(start_point, a0) ##############################################
     # print(a0.shape, a0_tang.shape)
     
     t = torch.rand(a0.shape[0]).to(device)
@@ -195,7 +260,7 @@ def step_tangent(vf,
                             x_1=a1_tang.view(a0.shape[0]*a0.shape[1], a0.shape[2]))
 
     result_vf = vf(obs=obs_tang, label=label, x=path_sample.x_t.view(a0.shape), t=t)
-    result_vf = manifold.proju(start_point, result_vf)
+    # result_vf = manifold.proju(start_point, result_vf)
 
     target_vf = path_sample.dx_t.view(a0.shape)
 
@@ -220,7 +285,7 @@ def sample_uniform_geodesic_path(manifold, start, finish, num_points):
     path_sample = path.sample(t=t, x_0=start, x_1=finish)
     return path_sample.x_t.view(num_points, -1)
 
-def run_inference(manifold, model, run_parameters, class_labels, gt_obs, step_size=None):
+def run_inference(manifold, model, run_parameters, class_labels, gt_obs, step_size=None, inference_type="Native"):
     output = dict()
     if step_size is None:
         step_size = run_parameters['train']['inf_run_step']
@@ -230,27 +295,45 @@ def run_inference(manifold, model, run_parameters, class_labels, gt_obs, step_si
         tmp['samples'] = []
         tmp['paths'] = []
         for _ in range(run_parameters['train']['inf_runs_num']):
-            label = torch.tensor(class_labels[label_name],dtype=torch.long).unsqueeze(0)
-            res, samp, paths = infer_model(
-                                    model=model, 
-                                    start=gt_obs[class_labels[label_name],0,:run_parameters['data']['dim']], 
-                                    manifold=manifold,
-                                    label=label,
-                                    dim_manifold=run_parameters['data']['dim'],
-                                    model_horizon=run_parameters['data']['horizon_size'],
-                                    inference_horizon=run_parameters['data']['inference_horizon'],
-                                    sample_points=run_parameters['data']['sample_points'],
-                                    mean=run_parameters['data']['mean'],
-                                    std=run_parameters['data']['std'],
-                                    step_size=step_size
-                                )
-            tmp['results'].append(res)
-            tmp['samples'].append(samp)
-            tmp['paths'].append(paths)
+            if inference_type=="Tangent":
+                label = torch.tensor(class_labels[label_name],dtype=torch.long).unsqueeze(0)
+                res, samp = infer_model_tangent(
+                                        model=model, 
+                                        start=gt_obs[class_labels[label_name],0,:run_parameters['data']['dim']], 
+                                        label=label,
+                                        dim_manifold=run_parameters['data']['dim'],
+                                        model_horizon=run_parameters['data']['horizon_size'],
+                                        inference_horizon=run_parameters['data']['inference_horizon'],
+                                        sample_points=run_parameters['data']['sample_points'],
+                                        mean=run_parameters['data']['mean'],
+                                        std=run_parameters['data']['std'],
+                                        step_size=step_size
+                                    )
+                tmp['results'].append(res)
+                tmp['samples'].append(samp)
+            elif inference_type=="Native":
+                label = torch.tensor(class_labels[label_name],dtype=torch.long).unsqueeze(0)
+                res, samp, paths = infer_model(
+                                        model=model, 
+                                        start=gt_obs[class_labels[label_name],0,:run_parameters['data']['dim']], 
+                                        manifold=manifold,
+                                        label=label,
+                                        dim_manifold=run_parameters['data']['dim'],
+                                        model_horizon=run_parameters['data']['horizon_size'],
+                                        inference_horizon=run_parameters['data']['inference_horizon'],
+                                        sample_points=run_parameters['data']['sample_points'],
+                                        mean=run_parameters['data']['mean'],
+                                        std=run_parameters['data']['std'],
+                                        step_size=step_size
+                                    )
+                tmp['results'].append(res)
+                tmp['samples'].append(samp)
+                tmp['paths'].append(paths)
+            else:
+                raise ValueError("Not implemented inference type \'" + inference_type + "\'")
         output[label_name] = tmp
     return output
 
-# def uncertainty_of_model(vf, gt_obs, )
 
    
 if __name__ == '__main__':

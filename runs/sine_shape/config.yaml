@@ -17,16 +17,16 @@ ema:
 model:
   embed_dim: 24
   hidden_dim: 96
-  num_layers: 8
+  num_layers: 6
 scheduler:
   gamma: 0.5
-  step: 20000
+  step: 10000
 train:
   batch_size: 100
   device: cpu
-  epochs: 200001
+  epochs: 100001
   inf_every: 4000
-  inf_run_step: 0.01
-  inf_runs_num: 1
+  inf_run_step: 0.05
+  inf_runs_num: 3
   lr: 0.0001
   print_every: 4000

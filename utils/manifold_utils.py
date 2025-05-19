@@ -141,22 +141,22 @@ def infer_model_tangent(model,
   for i in tqdm(range(sample_points//inference_horizon), desc="Sampling trajectory", leave=False):
     c, tau_minus_c = sample_context(idx=step_idx, sample_points=sample_points)
     context = torch.cat([results[step_idx], results[c], tau_minus_c]).unsqueeze(0)
-
+    
     wrapped_vf = WrappedVF(model=ProjectToTangent(vecfield=model, 
-                                                  manifold=tangent_manifold), #manifold, 
+                                                  manifold=tangent_manifold),
                                                 #   tangent_point=start_point_sphere),
                            obs=context,
                            label=label)
     wrapped_vf.eval()
 
-    a0 = sample_normal_source(dim=3,# 2,# start.shape[-1]-1, ###############################################
+    a0 = sample_normal_source(dim=2,# start.shape[-1]-1, ###############################################
                               horizon=model_horizon, 
-                              manifold=None, # manifold  #############################################3
+                              manifold=manifold,  #############################################3
                               mean=mean,
                               std=std,
                               dim_to=dim_manifold)
     
-    a0_tang = a0 #manifold.logmap(start_point_sphere, a0) ######################################3333
+    a0_tang = manifold.logmap(start_point_sphere, a0) ######################################3333
     
     solver = RiemannianODESolver(velocity_model=wrapped_vf, 
                                  manifold=tangent_manifold)
@@ -170,7 +170,7 @@ def infer_model_tangent(model,
                 )
     new_idx = step_idx + inference_horizon
     if new_idx < results.shape[0]:
-        results[step_idx + 1 : new_idx + 1] = manifold.proju(start_point_sphere, a_infer.squeeze()[:inference_horizon].clone()) # a_infer.squeeze()[:inference_horizon].clone() 
+        results[step_idx + 1 : new_idx + 1] = a_infer.squeeze()[:inference_horizon].clone()  # manifold.proju(start_point_sphere, a_infer.squeeze()[:inference_horizon].clone()) 
         samples[step_idx + 1 : new_idx + 1] = a0.squeeze()[:inference_horizon].clone()
 
     step_idx = new_idx 
@@ -242,14 +242,14 @@ def step_tangent(vf,
     batch_size=a1_tang.shape[0]
 
     a0 = sample_normal_source(batch_size=batch_size,
-                                dim=3, #2  #run_parameters['data']['dim']-1, ##################################3333
+                                dim=2,  #run_parameters['data']['dim']-1,
                                 horizon=run_parameters['data']['horizon_size'], 
-                                manifold=None, # manifold  #############################################3
+                                manifold=manifold,  #############################################3
                                 mean=run_parameters['data']['mean'],
                                 std=run_parameters['data']['std'],
                                 dim_to=run_parameters['data']['dim'])
     
-    a0_tang = a0 # manifold.logmap(start_point, a0) ##############################################
+    a0_tang = manifold.logmap(start_point, a0)
     # print(a0.shape, a0_tang.shape)
     
     t = torch.rand(a0.shape[0]).to(device)

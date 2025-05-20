@@ -1,0 +1,35 @@
+train:
+  lr : 1.0e-4
+  epochs : 100001
+  batch_size : 100
+  inf_every : 4000
+  print_every : 4000
+  device : 'cpu'
+  inf_runs_num : 1
+  inf_run_step : 0.05
+
+model:
+  hidden_dim : 96
+  num_layers : 6
+  embed_dim : 24
+
+data:
+  dim : 3
+  manifold: Sphere
+  datasets: ["Sine"] #, "JShape", "Angle", "PShape"]
+  horizon_size : 20
+  inference_horizon : 10
+  scale_factor : 2.0
+  downsample : 5
+  sample_points : 300
+  mean : 0.0
+  std : 0.5
+
+ema:
+  warmup : 2000
+  update : 5
+  decay : 0.999
+
+scheduler:
+  step : 10000
+  gamma : 0.5

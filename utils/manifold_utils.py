@@ -55,6 +55,7 @@ def infer_model(model,
                 mean:float=0.0,
                 std:float=1.0,
                 return_intermediates=False,
+                project_infered=False,
                 verbose=False):
   start = start.squeeze()
   results = torch.zeros((sample_points + 1,) + start.shape, 
@@ -106,7 +107,10 @@ def infer_model(model,
         a_infer = path_sample
     new_idx = step_idx + inference_horizon
     if new_idx < results.shape[0]:
-        results[step_idx + 1 : new_idx + 1] = a_infer.squeeze()[:inference_horizon].clone()
+        infered_data = a_infer.squeeze()[:inference_horizon].clone()
+        if project_infered:
+            infered_data = Sphere().projx(infered_data)
+        results[step_idx + 1 : new_idx + 1] = infered_data
         samples[step_idx + 1 : new_idx + 1] = a0.squeeze()[:inference_horizon].clone()
 
     step_idx = new_idx 
@@ -208,6 +212,44 @@ def step(vf, batch,
 
     result_vf = vf(obs=obs, label=label, x=path_sample.x_t.view(a0.shape), t=t)
     result_vf = manifold.proju(path_sample.x_t.view(a0.shape), result_vf)
+
+    target_vf = path_sample.dx_t.view(a0.shape)
+
+    loss = torch.pow(result_vf - target_vf, 2).mean()
+    return loss
+
+def step_euc_sphere(vf, 
+                    batch, 
+                    run_parameters, 
+                    path,
+                    device='cpu'):
+    
+    obs, a1, label = batch
+    obs, a1, label = obs.to(device), a1.to(device), label.to(device)
+
+    label = label.view(-1)
+    obs = obs.view(-1, obs.shape[-1])
+    a1 = a1.view(-1, a1.shape[-2], a1.shape[-1])
+
+    batch_size=a1.shape[0]
+
+    a0 = sample_normal_source(batch_size=batch_size,
+                                dim=run_parameters['data']['dim'], 
+                                horizon=run_parameters['data']['horizon_size'], 
+                                manifold=None, 
+                                mean=run_parameters['data']['mean'],
+                                std=run_parameters['data']['std'],
+                                dim_to=run_parameters['data']['dim'])
+    
+    t = torch.rand(a0.shape[0]).to(device)
+    t_flat = t.unsqueeze(1).repeat(1, a0.shape[1]).view(a0.shape[0] * a0.shape[1])
+
+    path_sample = path.sample(t=t_flat, 
+                            x_0=a0.view(a0.shape[0]*a0.shape[1], a0.shape[2]), 
+                            x_1=a1.view(a0.shape[0]*a0.shape[1], a0.shape[2]))
+
+    result_vf = vf(obs=obs, label=label, x=path_sample.x_t.view(a0.shape), t=t)
+    # result_vf = manifold.proju(path_sample.x_t.view(a0.shape), result_vf)
 
     target_vf = path_sample.dx_t.view(a0.shape)
 
@@ -324,6 +366,25 @@ def run_inference(manifold, model, run_parameters, class_labels, gt_obs, step_si
                                         sample_points=run_parameters['data']['sample_points'],
                                         mean=run_parameters['data']['mean'],
                                         std=run_parameters['data']['std'],
+                                        step_size=step_size
+                                    )
+                tmp['results'].append(res)
+                tmp['samples'].append(samp)
+                tmp['paths'].append(paths)
+            elif inference_type=="Euclidean sphere":
+                label = torch.tensor(class_labels[label_name],dtype=torch.long).unsqueeze(0)
+                res, samp, paths = infer_model(
+                                        model=model, 
+                                        start=gt_obs[class_labels[label_name],0,:run_parameters['data']['dim']], 
+                                        manifold=manifold,
+                                        label=label,
+                                        dim_manifold=run_parameters['data']['dim'],
+                                        model_horizon=run_parameters['data']['horizon_size'],
+                                        inference_horizon=run_parameters['data']['inference_horizon'],
+                                        sample_points=run_parameters['data']['sample_points'],
+                                        mean=run_parameters['data']['mean'],
+                                        std=run_parameters['data']['std'],
+                                        project_infered=True,
                                         step_size=step_size
                                     )
                 tmp['results'].append(res)

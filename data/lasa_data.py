@@ -5,7 +5,13 @@ from torch.utils.data import Dataset, DataLoader
 import pyLasaDataset as lasa
 from flow_matching.utils.manifolds import Manifold, Euclidean, Sphere
 
-def wrap(manifold, samples, dim_from, dim_to):
+def random_orthogonal_matrix(n):
+    """Generates a random orthogonal matrix using QR decomposition."""
+    A = torch.randn(n, n)
+    Q, _ = torch.linalg.qr(A)
+    return Q
+
+def wrap(manifold, samples, dim_from, dim_to, Q=None, project=False):
     """
     Projects points from R^(dim_from) to an dim_to-dimensional manifold.
 
@@ -27,7 +33,15 @@ def wrap(manifold, samples, dim_from, dim_to):
 
     samples = torch.cat([samples, torch.zeros_like(samples[..., :k])], dim=-1) / 2
 
-    return manifold.expmap(center, samples)
+    wrapped = manifold.expmap(center, samples)
+
+    if Q is not None:
+        wrapped = torch.einsum('ij,...j->...i', Q, wrapped)
+    
+    if project:
+        wrapped = manifold.projx(wrapped)
+
+    return wrapped
 
 class StatePyLASADataset(Dataset):
     def __init__(self, dataset_names: list,
@@ -40,7 +54,8 @@ class StatePyLASADataset(Dataset):
                  dim_from: int = 2,
                  dim_to: int = 3,
                  dim_infer: int = 3,
-                 start_points: dict = {}):
+                 start_points: dict = {},
+                 rotate=False):
         """
         PyTorch Dataset wrapper for multiple LASA datasets with normalization and structured observations.
 
@@ -62,6 +77,10 @@ class StatePyLASADataset(Dataset):
         self.dim_infer = dim_infer
         self.train = train
         self.start_points = start_points
+        if rotate:
+            self.Q = random_orthogonal_matrix(dim_to)
+        else:
+            self.Q = None
 
         
         self.demos = []
@@ -87,7 +106,9 @@ class StatePyLASADataset(Dataset):
                     demo_data = wrap(manifold=self.manifold, 
                                     samples=demo_data,
                                     dim_from=self.dim_from, 
-                                    dim_to=self.dim_to)
+                                    dim_to=self.dim_to,
+                                    Q=self.Q,
+                                    project=True)
                 self.demos.append(demo_data)
                 self.horizons.append(self._get_horizons(demo_data))
                 self.labels.append(torch.tensor(label, dtype=torch.long).repeat(demo_data.shape[:-1]))

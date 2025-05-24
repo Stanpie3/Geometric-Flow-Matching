@@ -15,6 +15,26 @@ from flow_matching.path import GeodesicProbPath
 from flow_matching.path.scheduler import CondOTScheduler
 from flow_matching.solver import RiemannianODESolver
 from data.lasa_data import wrap
+from .so3 import *
+from .pytorch3d import quaternion_to_matrix, matrix_to_quaternion
+
+def quat_obs_to_mat_obs(obs, base='R9'):
+    if base == 'R9':
+        b, _ = obs.shape
+        obs1_mat = BM_2_R9(quaternion_to_matrix(obs[:,:4]))
+        obsk_mat = BM_2_R9(quaternion_to_matrix(obs[:,4:8]))
+        dist = obs[:,8]
+        obs_mat = torch.cat((obs1_mat, obsk_mat, dist.unsqueeze(1)), dim=1)
+    elif base == 'R6':
+        b, _ = obs.shape
+        obs1_mat = BM_2_R6(quaternion_to_matrix(obs[:,:4]))
+        obsk_mat = BM_2_R6(quaternion_to_matrix(obs[:,4:8]))
+        dist = obs[:,8]
+        obs_mat = torch.cat((obs1_mat, obsk_mat, dist.unsqueeze(1)), dim=1)
+    else:
+        raise ValueError("Unknown domain \'" + base + "\'")
+
+    return obs_mat
 
 def sample_normal_source(batch_size:int=1,
                         dim:int=2,
@@ -56,7 +76,8 @@ def infer_model(model,
                 std:float=1.0,
                 return_intermediates=False,
                 project_infered=False,
-                verbose=False):
+                verbose=False,
+                base='S'):
   start = start.squeeze()
   results = torch.zeros((sample_points + 1,) + start.shape, 
                         dtype=start.dtype, 
@@ -82,13 +103,25 @@ def infer_model(model,
                            label=label)
     wrapped_vf.eval()
 
-    a0 = sample_normal_source(dim=2,# start.shape[-1]-1, 
-                              horizon=model_horizon, 
-                              manifold=manifold, 
-                              mean=mean,
-                              std=std,
-                              dim_to=dim_manifold)
-    
+    if base == 'S':
+        a0 = sample_normal_source(dim=dim_manifold-1,# start.shape[-1]-1, ##################################### 2
+                                horizon=model_horizon, 
+                                manifold=manifold, 
+                                mean=mean,
+                                std=std,
+                                dim_to=dim_manifold)
+    elif base == 'R9':
+        a0 = sample_normal_SO3(batch_size=1,
+                               horizon=model_horizon, 
+                               mean=None,
+                               std=torch.tensor(std))
+        a0 = BM_2_R9(a0)
+    elif base == 'R6':
+        a0 = sample_normal_SO3(batch_size=1,
+                               horizon=model_horizon, 
+                               mean=None,
+                               std=torch.tensor(std))
+        a0 = BM_2_R6(a0)
     
     solver = RiemannianODESolver(velocity_model=wrapped_vf, 
                                  manifold=manifold)
@@ -108,10 +141,17 @@ def infer_model(model,
     new_idx = step_idx + inference_horizon
     if new_idx < results.shape[0]:
         infered_data = a_infer.squeeze()[:inference_horizon].clone()
+        sampled_data = a0.squeeze()[:inference_horizon].clone()
+        if base == 'R6':
+            infered_data = zhou_6d_to_so3(infered_data)
+            sampled_data = zhou_6d_to_so3(sampled_data)
+        elif base == 'R9':
+            infered_data = procrustes_to_so3(infered_data)
+            sampled_data = procrustes_to_so3(sampled_data)
         if project_infered:
             infered_data = Sphere().projx(infered_data)
         results[step_idx + 1 : new_idx + 1] = infered_data
-        samples[step_idx + 1 : new_idx + 1] = a0.squeeze()[:inference_horizon].clone()
+        samples[step_idx + 1 : new_idx + 1] = sampled_data
 
     step_idx = new_idx 
   return results, samples, paths
@@ -153,14 +193,14 @@ def infer_model_tangent(model,
                            label=label)
     wrapped_vf.eval()
 
-    a0 = sample_normal_source(dim=2,# start.shape[-1]-1, ###############################################
+    a0 = sample_normal_source(dim=dim_manifold,# start.shape[-1]-1, ####################### 2
                               horizon=model_horizon, 
-                              manifold=manifold,  #############################################3
+                              manifold=None,  ############################# manifold
                               mean=mean,
                               std=std,
                               dim_to=dim_manifold)
     
-    a0_tang = manifold.logmap(start_point_sphere, a0) ######################################3333
+    a0_tang = manifold.proju(start_point_sphere, a0) #a0#manifold.logmap(start_point_sphere, a0) ######################################3333
     
     solver = RiemannianODESolver(velocity_model=wrapped_vf, 
                                  manifold=tangent_manifold)
@@ -184,7 +224,8 @@ def step(vf, batch,
          run_parameters, 
          manifold,
          path,
-         device='cpu'):
+         device='cpu',
+         base="S"):
     
     obs, a1, label = batch
     obs, a1, label = obs.to(device), a1.to(device), label.to(device)
@@ -195,13 +236,34 @@ def step(vf, batch,
 
     batch_size=a1.shape[0]
 
-    a0 = sample_normal_source(batch_size=batch_size,
-                                dim=2, #run_parameters['data']['dim']-1, 
-                                horizon=run_parameters['data']['horizon_size'], 
-                                manifold=manifold, 
-                                mean=run_parameters['data']['mean'],
-                                std=run_parameters['data']['std'],
-                                dim_to=run_parameters['data']['dim'])
+    if base == 'S':
+        a0 = sample_normal_source(batch_size=batch_size,
+                                    dim=run_parameters['data']['dim']-1, ######################################## 2
+                                    horizon=run_parameters['data']['horizon_size'], 
+                                    manifold=manifold, 
+                                    mean=run_parameters['data']['mean'],
+                                    std=run_parameters['data']['std'],
+                                    dim_to=run_parameters['data']['dim'])
+    elif base == 'R9':
+        assert(obs.shape[-1] == 9), "Input does not represent quaternion"
+        a0 = sample_normal_SO3(batch_size=batch_size, 
+                               horizon=run_parameters['data']['horizon_size'], 
+                               mean=None,
+                               std=torch.tensor(run_parameters['data']['std']))
+        a0 = BM_2_R9(a0)
+        a1 = BM_2_R9(quaternion_to_matrix(a1))
+        obs = quat_obs_to_mat_obs(obs, base=base)
+    elif base == 'R6':
+        assert(obs.shape[-1] == 9), "Input does not represent quaternion"
+        a0 = sample_normal_SO3(batch_size=batch_size, 
+                               horizon=run_parameters['data']['horizon_size'], 
+                               mean=None,
+                               std=torch.tensor(run_parameters['data']['std']))
+        a0 = BM_2_R6(a0)
+        a1 = BM_2_R6(quaternion_to_matrix(a1))
+        obs = quat_obs_to_mat_obs(obs, base=base)
+    else:
+        raise ValueError("Unknown domain \'" + base + "\'")
     
     t = torch.rand(a0.shape[0]).to(device)
     t_flat = t.unsqueeze(1).repeat(1, a0.shape[1]).view(a0.shape[0] * a0.shape[1])
@@ -284,14 +346,14 @@ def step_tangent(vf,
     batch_size=a1_tang.shape[0]
 
     a0 = sample_normal_source(batch_size=batch_size,
-                                dim=2,  #run_parameters['data']['dim']-1,
+                                dim=run_parameters['data']['dim'], ############################### 2
                                 horizon=run_parameters['data']['horizon_size'], 
-                                manifold=manifold,  #############################################3
+                                manifold=None, ############## manifold
                                 mean=run_parameters['data']['mean'],
                                 std=run_parameters['data']['std'],
                                 dim_to=run_parameters['data']['dim'])
     
-    a0_tang = manifold.logmap(start_point, a0)
+    a0_tang = manifold.proju(start_point, a0) #manifold.logmap(start_point, a0) ####################################################################3
     # print(a0.shape, a0_tang.shape)
     
     t = torch.rand(a0.shape[0]).to(device)

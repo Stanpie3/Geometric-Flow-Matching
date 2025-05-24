@@ -1,0 +1,32 @@
+data:
+  datasets:
+  - Sine
+  dim: 3
+  downsample: 5
+  horizon_size: 20
+  inference_horizon: 10
+  manifold: Sphere
+  mean: 0.0
+  sample_points: 220
+  scale_factor: 2.0
+  std: 0.5
+ema:
+  decay: 0.999
+  update: 5
+  warmup: 2000
+model:
+  embed_dim: 24
+  hidden_dim: 96
+  num_layers: 6
+scheduler:
+  gamma: 0.5
+  step: 10000
+train:
+  batch_size: 100
+  device: cpu
+  epochs: 100001
+  inf_every: 4000
+  inf_run_step: 0.05
+  inf_runs_num: 1
+  lr: 0.0001
+  print_every: 4000

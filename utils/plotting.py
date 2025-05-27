@@ -17,7 +17,8 @@ def plot_flow_on_sphere(results_list,
                         one_canvas=False,
                         line_width_traj=1,
                         line_width_gt=1,
-                        line_type='.--'):
+                        line_type='.--',
+                        axis_off=False):
     """
     Plots multiple flows from sampled points to results on the 2-sphere.
 
@@ -61,9 +62,12 @@ def plot_flow_on_sphere(results_list,
 
                 ax.scatter(samples_np[:, 0], samples_np[:, 1], samples_np[:, 2], color="green", s=20, label="Base Distribution")
 
-
             if one_canvas:
-                ax.plot(results_np[:, 0], results_np[:, 1], results_np[:, 2], line_type, color="blue", 
+                if idx == 0:
+                    ax.plot(results_np[0:, 0], results_np[0:, 1], results_np[0:, 2], line_type, color="blue", 
+                        linewidth=line_width_traj, label="Learned Path")
+                else:
+                    ax.plot(results_np[0:, 0], results_np[0:, 1], results_np[0:, 2], line_type, color="blue", 
                     linewidth=line_width_traj)
             else:
                 ax.plot(results_np[:, 0], results_np[:, 1], results_np[:, 2], line_type, color="blue", 
@@ -107,6 +111,8 @@ def plot_flow_on_sphere(results_list,
             ax.legend()
 
         plt.tight_layout()
+        if axis_off:
+            ax.set_axis_off()
         plt.show()
 
     if dynamic:

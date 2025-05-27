@@ -86,6 +86,7 @@ def infer_model(model,
 
   results[0] = start.clone()
   samples[0] = start.clone()
+#   print(results.shape)
 
   step_idx = 0
   paths = []
@@ -96,7 +97,7 @@ def infer_model(model,
   for i in tqdm(range(sample_points//inference_horizon), desc="Sampling trajectory", leave=False):
     c, tau_minus_c = sample_context(idx=step_idx, sample_points=sample_points)
     context = torch.cat([results[step_idx], results[c], tau_minus_c]).unsqueeze(0)
-
+    # print(context.shape)
     wrapped_vf = WrappedVF(model=ProjectToTangent(vecfield=model, 
                                                   manifold=manifold),
                            obs=context,
@@ -122,6 +123,8 @@ def infer_model(model,
                                mean=None,
                                std=torch.tensor(std))
         a0 = BM_2_R6(a0)
+    
+    # print(a0.shape)
     
     solver = RiemannianODESolver(velocity_model=wrapped_vf, 
                                  manifold=manifold)
@@ -371,23 +374,26 @@ def step_tangent(vf,
     loss = torch.pow(result_vf - target_vf, 2).mean()
     return loss
 
-def curve_geodesic_MSE(manifold, x_curve, y_curve):
-    assert(x_curve.shape == y_curve.shape)
-    dist = np.zeros(x_curve.shape[0])
-    for i in range(x_curve.shape[0]):
-        dist[i]=manifold.dist(x_curve[i], y_curve[i])
-    return (dist[~np.isnan(dist)]**2).mean()
+def geodesic_mse(X: torch.Tensor, Y: torch.Tensor, eps: float = 1e-7) -> torch.Tensor:
+    """
+    Compute geodesic MSE between two [n, dim] tensors on the sphere S^{dim-1}.
+    
+    Args:
+        X, Y: torch.Tensor of shape [n, dim], each row on the unit sphere
+        eps: small constant to prevent numerical issues with arccos
 
-def sample_uniform_geodesic_path(manifold, start, finish, num_points):
-    assert(start.shape == finish.shape)
-    assert(num_points >= 2)
-    path = GeodesicProbPath(scheduler=CondOTScheduler(), manifold=manifold)
-    t = torch.linspace(0.0, 1.0, num_points)
-    start = start.unsqueeze(0)
-    start = start.repeat(num_points, 1)
-    finish = finish.unsqueeze(0).repeat(num_points, 1)
-    path_sample = path.sample(t=t, x_0=start, x_1=finish)
-    return path_sample.x_t.view(num_points, -1)
+    Returns:
+        torch scalar: mean squared geodesic distance (in radians^2)
+    """
+    assert X.shape == Y.shape, "Input tensors must have the same shape"
+
+    dot_products = torch.sum(X * Y, dim=1)
+    dot_products = torch.clamp(dot_products, -1.0 + eps, 1.0 - eps)  # for stability
+    angles = torch.acos(dot_products)
+    mse = torch.mean(angles ** 2)
+    return mse
+
+
 
 def run_inference(manifold, model, run_parameters, class_labels, gt_obs, step_size=None, inference_type="Native"):
     output = dict()
@@ -457,6 +463,23 @@ def run_inference(manifold, model, run_parameters, class_labels, gt_obs, step_si
         output[label_name] = tmp
     return output
 
+def curve_geodesic_MSE(manifold, x_curve, y_curve):
+    assert(x_curve.shape == y_curve.shape)
+    dist = np.zeros(x_curve.shape[0])
+    for i in range(x_curve.shape[0]):
+        dist[i]=manifold.dist(x_curve[i], y_curve[i])
+    return (dist[~np.isnan(dist)]**2).mean()
+
+def sample_uniform_geodesic_path(manifold, start, finish, num_points):
+    assert(start.shape == finish.shape)
+    assert(num_points >= 2)
+    path = GeodesicProbPath(scheduler=CondOTScheduler(), manifold=manifold)
+    t = torch.linspace(0.0, 1.0, num_points)
+    start = start.unsqueeze(0)
+    start = start.repeat(num_points, 1)
+    finish = finish.unsqueeze(0).repeat(num_points, 1)
+    path_sample = path.sample(t=t, x_0=start, x_1=finish)
+    return path_sample.x_t.view(num_points, -1)
 
    
 if __name__ == '__main__':

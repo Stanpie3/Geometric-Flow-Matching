@@ -16,7 +16,7 @@ model:
 data:
   dim : 3
   manifold: Sphere
-  datasets: ["Sine"] #, "JShape", "Angle", "PShape"]
+  datasets: ["Sshape"] #, "Sine" ,"JShape", "Angle", "PShape"]
   horizon_size : 20
   inference_horizon : 10
   scale_factor : 2.0
